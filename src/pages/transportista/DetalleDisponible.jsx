@@ -53,7 +53,7 @@ export default function DetalleDisponible() {
       setHacienda(h || [])
     }
 
-    const t = await getMiTransportista()
+    const t = await getMiTransportista('id, usuarios(razon_social, nombre, apellido)')
     if (t) {
       const { data: o } = await supabase.from('ofertas')
         .select('*').eq('pedido_id', id).eq('transportista_id', t.id).maybeSingle()
@@ -79,7 +79,7 @@ export default function DetalleDisponible() {
 
     setSaving(true); setError('')
     try {
-      const t = await getMiTransportista()
+      const t = await getMiTransportista('id, usuarios(razon_social, nombre, apellido)')
       const { error: insErr } = await supabase.from('ofertas').insert({
         pedido_id: id,
         transportista_id: t.id,

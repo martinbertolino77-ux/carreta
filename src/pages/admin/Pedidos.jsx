@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import AdminShell from './Shell'
-import * as XLSX from 'xlsx'
+
 import { formatNroPedido } from '../../utils/format'
 import { ESTADOS_PEDIDO } from '../../utils/constants'
 
@@ -73,7 +73,8 @@ export default function AdminPedidos() {
     return !q || String(p.numero).includes(q) || nombreProd(p).toLowerCase().includes(q)
   })
 
-  const exportar = () => {
+  const exportar = async () => {
+    const XLSX = await import('xlsx')
     const filas = filtrados.map(p => ({
       'Nro': formatNroPedido(p.numero), 'Estado': p.estado,
       'Tipo': tipoCarga(p),

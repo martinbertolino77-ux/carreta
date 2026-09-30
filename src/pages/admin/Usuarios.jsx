@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import AdminShell from './Shell'
-import * as XLSX from 'xlsx'
+
 
 const ROLES = ['todos', 'productor', 'transportista']
 
@@ -47,7 +47,8 @@ export default function AdminUsuarios() {
     return matchRol && matchBusqueda
   })
 
-  const exportar = () => {
+  const exportar = async () => {
+    const XLSX = await import('xlsx')
     const filas = filtrados.map(u => ({
       'Nombre': `${u.nombre} ${u.apellido}`,
       'Razón social': u.razon_social,

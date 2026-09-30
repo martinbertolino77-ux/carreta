@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import AdminShell from './Shell'
-import * as XLSX from 'xlsx'
 import { formatNroPedido } from '../../utils/format'
 
 export default function AdminReportes() {
@@ -11,27 +10,29 @@ export default function AdminReportes() {
 
   const descargar = async (tipo) => {
     setLoading(tipo)
+    // Import dinámico — solo carga xlsx cuando se necesita
+    const XLSX = await import('xlsx')
     let filas = []
 
     if (tipo === 'pedidos') {
       const q = supabase.from('pedidos')
         .select(`numero, estado, tipo_actividad, tipo_cereal, producto_granel, modo_publicacion,
           camiones_necesarios, kilos_estimados, destino_localidad, destino_provincia, created_at,
-          establecimientos(localidad, provincia),
+          establecimiento_id(localidad, provincia),
           productores(usuarios(nombre, apellido, razon_social, email))`)
         .order('created_at', { ascending: false })
       if (desde) q.gte('created_at', desde)
       if (hasta) q.lte('created_at', hasta + 'T23:59:59')
       const { data } = await q
-      filas = (data||[]).map(p => ({
+      filas = (data || []).map(p => ({
         'Nro': formatNroPedido(p.numero), 'Estado': p.estado,
         'Tipo': p.tipo_actividad === 'agricola' ? p.tipo_cereal : p.tipo_actividad === 'ganadero' ? 'Ganadero' : p.producto_granel,
-        'Origen': `${p.establecimientos?.localidad}, ${p.establecimientos?.provincia}`,
+        'Origen': `${p.establecimiento_id?.localidad}, ${p.establecimiento_id?.provincia}`,
         'Destino': `${p.destino_localidad}, ${p.destino_provincia}`,
         'Camiones': p.camiones_necesarios, 'Kilos': p.kilos_estimados,
-        'Productor': p.productores?.usuarios?.razon_social || `${p.productores?.usuarios?.nombre||''} ${p.productores?.usuarios?.apellido||''}`.trim(),
+        'Productor': p.productores?.usuarios?.razon_social || `${p.productores?.usuarios?.nombre || ''} ${p.productores?.usuarios?.apellido || ''}`.trim(),
         'Email productor': p.productores?.usuarios?.email,
-        'Modo': p.modo_publicacion, 'Fecha': p.created_at?.slice(0,10),
+        'Modo': p.modo_publicacion, 'Fecha': p.created_at?.slice(0, 10),
       }))
     }
 
@@ -39,12 +40,12 @@ export default function AdminReportes() {
       const { data } = await supabase.from('usuarios')
         .select('nombre, apellido, razon_social, email, cuit, telefono, localidad, provincia, roles, is_admin, activo, created_at')
         .order('created_at', { ascending: false })
-      filas = (data||[]).map(u => ({
+      filas = (data || []).map(u => ({
         'Nombre': `${u.nombre} ${u.apellido}`, 'Razón social': u.razon_social,
         'Email': u.email, 'CUIT': u.cuit, 'Teléfono': u.telefono,
         'Localidad': u.localidad, 'Provincia': u.provincia,
-        'Roles': (u.roles||[]).join(', '), 'Admin': u.is_admin?'Sí':'No',
-        'Activo': u.activo?'Sí':'No', 'Registro': u.created_at?.slice(0,10),
+        'Roles': (u.roles || []).join(', '), 'Admin': u.is_admin ? 'Sí' : 'No',
+        'Activo': u.activo ? 'Sí' : 'No', 'Registro': u.created_at?.slice(0, 10),
       }))
     }
 
@@ -52,19 +53,19 @@ export default function AdminReportes() {
       const { data } = await supabase.from('calificaciones')
         .select('calificador_rol, puntaje_1, puntaje_2, puntaje_3, comentario, visible, created_at, ofertas(pedidos(numero))')
         .order('created_at', { ascending: false })
-      filas = (data||[]).map(c => ({
+      filas = (data || []).map(c => ({
         'Pedido': c.ofertas?.pedidos?.numero ? formatNroPedido(c.ofertas.pedidos.numero) : '—',
         'Rol calificador': c.calificador_rol,
         'Puntaje 1': c.puntaje_1, 'Puntaje 2': c.puntaje_2, 'Puntaje 3': c.puntaje_3,
-        'Promedio': ((c.puntaje_1+c.puntaje_2+c.puntaje_3)/3).toFixed(1),
-        'Comentario': c.comentario || '', 'Visible': c.visible?'Sí':'No',
-        'Fecha': c.created_at?.slice(0,10),
+        'Promedio': ((c.puntaje_1 + c.puntaje_2 + c.puntaje_3) / 3).toFixed(1),
+        'Comentario': c.comentario || '', 'Visible': c.visible ? 'Sí' : 'No',
+        'Fecha': c.created_at?.slice(0, 10),
       }))
     }
 
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), tipo)
-    XLSX.writeFile(wb, `carreta_${tipo}${desde||hasta ? `_${desde||''}_${hasta||''}` : ''}.xlsx`)
+    XLSX.writeFile(wb, `carreta_${tipo}${desde || hasta ? `_${desde || ''}_${hasta || ''}` : ''}.xlsx`)
     setLoading('')
   }
 

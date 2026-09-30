@@ -1,12 +1,18 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { usePushNotifications } from '../hooks/usePushNotifications'
 
 const AuthContext = createContext(null)
+
+function AuthProviderInner({ children, usuarioId }) {
+  usePushNotifications(usuarioId)
+  return children
+}
 
 export function AuthProvider({ children }) {
   const [session, setSession]   = useState(null)
   const [usuario, setUsuario]   = useState(null)
-  const [rol, setRol]           = useState(null) // 'productor' | 'transportista'
+  const [rol, setRol]           = useState(null)
   const [loading, setLoading]   = useState(true)
 
   useEffect(() => {
@@ -41,7 +47,9 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{ session, usuario, rol, setRol, loading, signOut, cargarUsuario }}>
-      {children}
+      <AuthProviderInner usuarioId={usuario?.id}>
+        {children}
+      </AuthProviderInner>
     </AuthContext.Provider>
   )
 }

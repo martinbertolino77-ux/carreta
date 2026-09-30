@@ -20,7 +20,11 @@ export default defineConfig({
 
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        globIgnores: ['**/node_modules/**'],
+        globIgnores: [
+          '**/node_modules/**',
+          '**/sw.js',
+          '**/sw.js.map',
+        ],
       },
     }),
   ],

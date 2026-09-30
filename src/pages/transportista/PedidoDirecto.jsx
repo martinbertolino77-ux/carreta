@@ -44,11 +44,22 @@ export default function PedidoDirecto() {
     setLoading(false)
   }
 
+  const notificarProductor = (titulo, cuerpo) => {
+    if (!pedido?.productores?.usuario_id) return
+    supabase.functions.invoke('send-push', {
+      body: {
+        usuario_id: pedido.productores.usuario_id,
+        titulo,
+        cuerpo,
+        url: `/productor/pedido/${id}`,
+      }
+    }).catch(err => console.warn('[Push] Error:', err))
+  }
+
   const aceptar = async () => {
     setSaving(true)
     const { error } = await supabase.rpc('responder_pedido_directo', { p_pedido_id: id, p_acepta: true })
     if (error) { setSaving(false); alert(error.message); return }
-    // Guardar condiciones opcionales en la oferta recién creada
     if (formAcuerdo.forma_pago || formAcuerdo.monto) {
       const { data: oferta } = await supabase.from('ofertas')
         .select('id').eq('pedido_id', id).eq('estado', 'seleccionada').maybeSingle()
@@ -59,6 +70,12 @@ export default function PedidoDirecto() {
         }).eq('id', oferta.id)
       }
     }
+    const prod = pedido.productores?.usuarios
+    const nombreProd = prod?.razon_social || `${prod?.nombre || ''} ${prod?.apellido || ''}`.trim()
+    notificarProductor(
+      '✅ Pedido directo aceptado',
+      `${nombreProd ? 'Tu transportista aceptó' : 'Aceptaron'} el pedido ${formatNroPedido(pedido.numero)}`
+    )
     setSaving(false)
     navigate(`/transportista/pedido/${id}`)
   }
@@ -68,6 +85,12 @@ export default function PedidoDirecto() {
     const { error } = await supabase.rpc('responder_pedido_directo', {
       p_pedido_id: id, p_acepta: false, p_motivo: motivo.trim() || null
     })
+    if (!error) {
+      notificarProductor(
+        '❌ Pedido directo rechazado',
+        `El transportista rechazó el pedido ${formatNroPedido(pedido.numero)}${motivo.trim() ? `: ${motivo.trim()}` : ''}`
+      )
+    }
     setSaving(false)
     if (error) { alert(error.message); return }
     navigate('/transportista/pedidos')
@@ -152,7 +175,6 @@ export default function PedidoDirecto() {
           </Button>
         </div>
 
-        {/* Modal aceptar con condiciones opcionales */}
         <Modal open={modalAceptar} onClose={() => setModalAceptar(false)} title="Aceptar pedido">
           <div className="text-xs text-gray-500 mb-4">
             Si ya acordaste las condiciones con el productor, podés registrarlas acá. Es opcional.

@@ -21,21 +21,20 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-verde-800 flex flex-col items-center justify-center px-6">
-      {/* Logo */}
       <div className="flex items-center gap-3 mb-2">
         <img src="/logo_carreta.png" alt="Carreta" className="w-14 h-14 object-contain bg-white rounded-[14px] p-1" />
         <span className="text-3xl font-bold text-white tracking-tight">Carreta</span>
       </div>
       <p className="text-white/60 text-sm text-center mb-8">Conectando la actividad agropecuaria</p>
 
-      {/* Card */}
       <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
         <h1 className="text-base font-bold text-gray-900 mb-4">Ingresá a tu cuenta</h1>
-        <form onSubmit={doLogin}>
+        <form onSubmit={doLogin} autoComplete="on">
           <input
             type="email"
             placeholder="Email"
             value={email}
+            autoComplete="username"
             onChange={e => setEmail(e.target.value)}
             className="w-full border border-gray-200 rounded-[10px] px-3 py-2.5 text-sm mb-3 bg-gray-50
               focus:outline-none focus:border-verde-600 font-[Inter]"
@@ -44,6 +43,7 @@ export default function Login() {
             type="password"
             placeholder="Contraseña"
             value={pass}
+            autoComplete="current-password"
             onChange={e => setPass(e.target.value)}
             className="w-full border border-gray-200 rounded-[10px] px-3 py-2.5 text-sm mb-1 bg-gray-50
               focus:outline-none focus:border-verde-600 font-[Inter]"

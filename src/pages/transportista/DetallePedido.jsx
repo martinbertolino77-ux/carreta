@@ -1,0 +1,768 @@
+import { useEffect, useState } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { supabase, getMiTransportista } from '../../lib/supabase'
+import Shell, { Body } from '../../components/layout/Shell'
+import Topbar from '../../components/layout/Topbar'
+import BottomTabs from '../../components/layout/BottomTabs'
+import Card from '../../components/ui/Card'
+import Badge from '../../components/ui/Badge'
+import Button from '../../components/ui/Button'
+import Banner from '../../components/ui/Banner'
+import Modal from '../../components/ui/Modal'
+import Field, { Input, Select, Textarea } from '../../components/ui/Field'
+import Route from '../../components/ui/Route'
+import { ESTADOS_OFERTA, ETAPAS_TRANSPORTISTA, CATEGORIAS_HACIENDA } from '../../utils/constants'
+import ModalCancelar from '../../components/pedidos/ModalCancelar'
+import { formatNroPedido, formatFecha, formatNum } from '../../utils/format'
+import { tituloPedido, iconoPedido, bgPedido } from '../../utils/pedido'
+import { TIPOS_CHASIS, VEHICULOS, equipoDe } from '../../utils/constants'
+import Condiciones from '../../components/pedidos/Condiciones'
+import NotasPedido from '../../components/pedidos/NotasPedido'
+import MapRuta from '../../components/ui/MapRuta'
+import CalifDisplay from '../../components/ui/CalifDisplay'
+import ModalCalificar from '../../components/pedidos/ModalCalificar'
+import { useAuth } from '../../context/AuthContext'
+
+export default function DetallePedidoTransp() {
+  const { usuario } = useAuth()
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const [pedido, setPedido] = useState(null)
+  const [hacienda, setHacienda] = useState([])
+  const [datosOp, setDatosOp] = useState(null)
+  const [miOferta, setMiOferta] = useState(null)
+  const [camionesViaje, setCamionesViaje] = useState([])
+  const [transportista, setTransportista] = useState(null)
+  const [chasis, setChasis] = useState([])
+  const [acoplados, setAcoplados] = useState([])
+  const [choferes, setChoferes] = useState([])
+  const [documentos, setDocumentos] = useState([])
+  const [productor, setProductor] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [modalDatosOp, setModalDatosOp] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [modalCancelar, setModalCancelar] = useState(false)
+  const [yaCalifique, setYaCalifique] = useState(false)
+
+  const [formDatosOp, setFormDatosOp] = useState({
+    condiciones_acordadas: '',
+    forma_pago: '',
+    monto_acordado: '',
+  })
+  const [formCamiones, setFormCamiones] = useState([])
+  const [modoReemplazo, setModoReemplazo] = useState(false)
+  const [modalCalif, setModalCalif] = useState(false)
+  const [montoFinal, setMontoFinal] = useState('')
+  const [modalMonto, setModalMonto] = useState(false)
+  const [modalIncidencia, setModalIncidencia] = useState(null) // camionViaje id
+  const [formInc, setFormInc] = useState({ tipo:'rotura', descripcion:'', chasisId:'', chasisDom:'', chasisTara:'', acopladoId:'', acopladoDom:'', acopladoTara:'', choferId:'', choferNombre:'', choferDni:'' })
+  const [savingInc, setSavingInc] = useState(false)
+  const [misIncidencias, setMisIncidencias] = useState([])
+  const [ocupados, setOcupados] = useState([])
+
+  useEffect(() => { cargar() }, [id])
+
+  // Tiempo real: recargar cuando cambia el pedido o la oferta
+  useEffect(() => {
+    if (!id) return
+    const canal = supabase.channel(`detalle-transp-${id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos', filter: `id=eq.${id}` }, () => cargar())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ofertas', filter: `pedido_id=eq.${id}` }, () => cargar())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'camiones_viaje' }, () => cargar())
+      .subscribe()
+    return () => supabase.removeChannel(canal)
+  }, [id])
+
+  async function cargar() {
+    setLoading(true)
+
+    const t = await getMiTransportista()
+    setTransportista(t)
+
+    const { data: p } = await supabase
+      .from('pedidos')
+      .select(`*, establecimientos(nombre, localidad, provincia, departamento, link_maps, lat, lng)`)
+      .eq('id', id)
+      .single()
+    setPedido(p)
+
+    // Buscar productor por separado
+    if (p?.productor_id) {
+      const { data: prod } = await supabase
+        .from('productores')
+        .select('usuario_id')
+        .eq('id', p.productor_id)
+        .single()
+      if (prod?.usuario_id) {
+        const { data: u } = await supabase
+          .from('usuarios')
+          .select('nombre, apellido, telefono')
+          .eq('id', prod.usuario_id)
+          .single()
+        setProductor(u || null)
+      }
+    }
+
+    if (p?.tipo_actividad === 'ganadero') {
+      const { data: h } = await supabase.from('pedidos_hacienda').select('*').eq('pedido_id', id)
+      setHacienda(h || [])
+    }
+
+    // Mi oferta en este pedido (etapa propia)
+    let o = null
+    if (t) {
+      const { data } = await supabase.from('ofertas')
+        .select('*').eq('pedido_id', id).eq('transportista_id', t.id).maybeSingle()
+      o = data || null
+    }
+    setMiOferta(o)
+
+    let dop = null
+    if (t) {
+      const { data } = await supabase
+        .from('datos_operativos')
+        .select('*')
+        .eq('pedido_id', id)
+        .eq('transportista_id', t.id)
+        .maybeSingle()
+      dop = data || null
+    }
+    setDatosOp(dop)
+    if (!dop) { setCamionesViaje([]); setDocumentos([]) }
+
+    if (dop) {
+      const { data: cv } = await supabase
+        .from('camiones_viaje')
+        .select('*, chasis(dominio, tipo, tara_kg), acoplados(dominio, tipo, tara_kg), choferes(nombre, apellido)')
+        .eq('datos_operativos_id', dop.id)
+      setCamionesViaje(cv || [])
+
+      if (cv?.length) {
+        const cvIds = cv.map(c => c.id)
+        const { data: docs } = await supabase
+          .from('documentos')
+          .select('*')
+          .in('camion_viaje_id', cvIds)
+        setDocumentos(docs || [])
+      }
+    }
+
+    if (t) {
+      const [{ data: ch }, { data: ac }, { data: cho }] = await Promise.all([
+        supabase.from('chasis').select('id, dominio, tipo, tara_kg').eq('transportista_id', t.id).eq('activo', true),
+        supabase.from('acoplados').select('id, dominio, tipo, tara_kg').eq('transportista_id', t.id).eq('activo', true),
+        supabase.from('choferes').select('id, nombre, apellido').eq('transportista_id', t.id).eq('activo', true),
+      ])
+      setChasis(ch || [])
+      setAcoplados(ac || [])
+      setChoferes(cho || [])
+
+      // ¿Ya califiqué este viaje? (usar 'o' local, no el estado que aún no se actualizó)
+    if (t && o?.id) {
+      const { data: ya } = await supabase.from('calificaciones').select('id')
+        .eq('oferta_id', o.id).eq('calificador_rol', 'transportista').maybeSingle()
+      const calificado = !!ya
+      setYaCalifique(calificado)
+      // Abrir modal automáticamente si no calificó
+      if (!calificado && o?.etapa === 'finalizado') setModalCalif(true)
+    }
+
+    // Incidencias activas de este pedido
+    if (id) {
+      const { data: incs } = await supabase.from('incidencias').select('*')
+        .eq('pedido_id', id).eq('resuelta', false)
+      setMisIncidencias(incs || [])
+    }
+
+    // Camiones / choferes que están En camino en otro viaje
+      const { data: oc } = await supabase.rpc('recursos_ocupados')
+      setOcupados(oc || [])
+    }
+
+    setLoading(false)
+  }
+
+  const descargarDoc = async (doc) => {
+    // storage_path ya incluye 'documentos/' al inicio — quitarlo para el signed URL
+    const path = doc.storage_path.replace(/^documentos\//, '')
+    const { data } = await supabase.storage.from('documentos').createSignedUrl(path, 60)
+    if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+  }
+
+  // reemplazo = true: solo agrega los camiones que faltan (datos de pago ya enviados)
+  const abrirModalDatosOp = (reemplazo = false) => {
+    const total = miOferta?.camiones_aceptados || 1
+    const n = reemplazo ? Math.max(1, total - camionesViaje.length) : total
+    setModoReemplazo(reemplazo)
+    setFormCamiones(Array.from({ length: n }, () => ({ chasis_id: '', acoplado_id: '', chofer_id: '' })))
+    setError('')
+    setModalDatosOp(true)
+  }
+
+  const quitarCamion = async (cvId) => {
+    if (!confirm('¿Quitar este camión del viaje?')) return
+    const { error } = await supabase.from('camiones_viaje').delete().eq('id', cvId)
+    if (error) { alert(error.message); return }
+    await cargar()
+  }
+
+  // Motivo por el que una opción no se puede elegir
+  const enViaje = (campo, valor) => {
+    const o = ocupados.find(x => x[campo] === valor)
+    return o ? ` (en viaje #${String(o.pedido_numero).padStart(4, '0')})` : ''
+  }
+  const yaUsado = (campo, valor, idx) =>
+    camionesViaje.some(c => c[campo] === valor) ||
+    formCamiones.some((c, i) => i !== idx && c[campo] === valor)
+
+  const setFC = (i, k, v) => setFormCamiones(arr => arr.map((c, idx) => idx === i ? { ...c, [k]: v } : c))
+
+  // Equipo que carga un camión del formulario (remolque, o carrocería del chasis)
+  const equipoForm = (c) => {
+    const ch = chasis.find(x => x.id === c.chasis_id)
+    const ac = acoplados.find(x => x.id === c.acoplado_id)
+    return equipoDe(ch?.tipo, ac?.tipo)
+  }
+
+  const enviarDatosOp = async () => {
+    for (let i = 0; i < formCamiones.length; i++) {
+      const c = formCamiones[i]
+      if (!c.chasis_id || !c.acoplado_id || !c.chofer_id) { setError(`Camión ${i + 1}: completá chasis, remolque y chofer`); return }
+      const eq = equipoForm(c)
+      if (miOferta?.equipos?.length && !miOferta.equipos.includes(eq)) {
+        setError(`Camión ${i + 1}: el equipo (${VEHICULOS[eq] || 'sin tipo'}) no coincide con lo que ofreciste (${miOferta.equipos.map(e => VEHICULOS[e] || e).join(', ')})`)
+        return
+      }
+    }
+
+    setSaving(true); setError('')
+    try {
+      let dop = datosOp
+      if (!modoReemplazo) {
+        // Pago y condiciones los cargó el productor al elegir: la base los completa
+        const { data, error: dopErr } = await supabase.from('datos_operativos').insert({
+          pedido_id: id,
+          transportista_id: transportista.id,
+        }).select().single()
+        if (dopErr) throw dopErr
+        dop = data
+      }
+
+      const camionesData = formCamiones.map(c => ({
+        datos_operativos_id: dop.id,
+        chasis_id: c.chasis_id,
+        acoplado_id: c.acoplado_id || null,
+        chofer_id: c.chofer_id,
+      }))
+      const { error: cvErr } = await supabase.from('camiones_viaje').insert(camionesData)
+      if (cvErr) throw cvErr
+
+      // Paso 4: pedido → Datos enviados
+      const { error: rpcErr } = await supabase.rpc('marcar_datos_enviados', { p_pedido_id: id })
+      if (rpcErr) throw rpcErr
+
+      setModalDatosOp(false)
+      await cargar()
+    } catch (e) { setError(e.message); await cargar() }
+    finally { setSaving(false) }
+  }
+
+  // Paso 6: informar descarga (todos descargados → Descargado)
+  const informarDescarga = async (camionId) => {
+    const cv = camionesViaje.find(c => c.id === camionId)
+    const ok = confirm(
+      `¿Confirmás que el camión ${cv?.chasis?.dominio || ''}${cv?.acoplados ? ' + ' + cv.acoplados.dominio : ''} ` +
+      `YA DESCARGÓ en ${pedido?.destino_localidad || 'destino'}?\n\nNo se puede deshacer.`
+    )
+    if (!ok) return
+    const { error } = await supabase.rpc('informar_descarga', { p_camion_viaje_id: camionId })
+    if (error) { alert(error.message); return }
+    // Si todos descargaron → pedir monto final
+    const doIds = (await supabase.from('datos_operativos').select('id')
+      .eq('pedido_id', id).eq('transportista_id', transportista?.id)).data?.map(d => d.id) || []
+    const { data: pend } = await supabase.from('camiones_viaje').select('id')
+      .in('datos_operativos_id', doIds).is('fecha_descarga', null)
+    if (!pend?.length) setModalMonto(true)
+    else await cargar()
+  }
+
+  if (loading) return (
+    <Shell>
+      <Topbar title="Pedido" showBack backTo="/transportista/pedidos" accent="azul" />
+      <Body><p className="text-xs text-gray-400 text-center py-10">Cargando…</p></Body>
+      <BottomTabs rol="transportista" />
+    </Shell>
+  )
+
+  if (!pedido) return (
+    <Shell>
+      <Topbar title="Pedido" showBack backTo="/transportista/pedidos" accent="azul" />
+      <Body><Banner color="red">No se encontró el pedido.</Banner></Body>
+      <BottomTabs rol="transportista" />
+    </Shell>
+  )
+
+  const etapa = miOferta?.estado === 'seleccionada' ? miOferta.etapa : null
+  const est = etapa
+    ? (ETAPAS_TRANSPORTISTA[etapa] || { label: etapa, color: 'gray' })
+    : (ESTADOS_OFERTA[miOferta?.estado] || { label: 'Sin oferta', color: 'gray' })
+  const finalizado = pedido.estado === 'completado' || etapa === 'finalizado'
+  const esAgricola = pedido.tipo_actividad === 'agricola'
+  const totalHacienda = hacienda.reduce((a, h) => a + h.cantidad * h.kg_por_cabeza, 0)
+
+  return (
+    <Shell>
+      <Topbar title={`Pedido ${formatNroPedido(pedido.numero)}`} showBack backTo="/transportista/pedidos" accent="azul" />
+      <Body>
+
+        {/* Encabezado */}
+        <Card className="mb-3">
+          <div className="flex items-start gap-3">
+            <div className={`w-12 h-12 rounded-[10px] flex items-center justify-center text-2xl flex-shrink-0 ${bgPedido(pedido)}`}>
+              {iconoPedido(pedido)}
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-base font-bold text-gray-900">
+                  {tituloPedido(pedido)}
+                </span>
+                <Badge color={finalizado && etapa ? 'green' : est.color}>{finalizado && etapa ? 'Finalizado' : est.label}</Badge>
+              </div>
+              <Route
+                origen={`${pedido.establecimientos?.localidad}, ${pedido.establecimientos?.provincia}`}
+                destino={`${pedido.destino_localidad}, ${pedido.destino_provincia}`}
+              />
+              <div className="flex gap-2 mt-2 flex-wrap">
+                <Badge color="gray">🚛 {etapa ? `${miOferta.camiones_aceptados} de ${pedido.camiones_necesarios}` : pedido.camiones_necesarios} camión{pedido.camiones_necesarios > 1 ? 'es' : ''}</Badge>
+                <Badge color="gray">📅 {formatFecha(pedido.fecha_entrega)}</Badge>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Oferta no activa */}
+        {!etapa && miOferta && (
+          <Banner color={miOferta.estado === 'en_pausa' ? 'orange' : 'red'} title={`Tu oferta: ${est.label}`} className="mb-3">
+            {miOferta.estado === 'en_pausa' && 'El productor eligió otra oferta. Podés ser elegido si se libera.'}
+            {miOferta.estado === 'cancelada' && 'Este viaje fue cancelado.'}
+            {miOferta.estado === 'cerrada' && 'No fue elegida esta vez. Será tenida en cuenta para próximos envíos.'}
+            {miOferta.estado === 'rechazada' && 'Tu oferta no fue seleccionada.'}
+            {miOferta.estado === 'enviada' && 'Tu oferta está pendiente de respuesta.'}
+          </Banner>
+        )}
+
+        {/* Productor */}
+        {productor && (
+          <Card className="mb-3">
+            <div className="text-xs font-semibold text-azul-600 mb-2">Productor</div>
+            <div className="text-sm font-semibold text-gray-900">
+              {productor.nombre} {productor.apellido}
+            </div>
+            {productor.telefono && (
+              <div className="text-xs text-gray-500 mt-0.5">📞 {productor.telefono}</div>
+            )}
+        </Card>
+        )}
+
+        {/* Origen y destino */}
+        <Card className="mb-3">
+          <div className="text-xs font-semibold text-azul-600 mb-2">Origen</div>
+          <div className="text-sm font-semibold text-gray-900">{pedido.establecimientos?.nombre}</div>
+          <div className="text-xs text-gray-500 mt-0.5">📍 {pedido.establecimientos?.localidad}, {pedido.establecimientos?.departamento}, {pedido.establecimientos?.provincia}</div>
+          {pedido.establecimientos?.link_maps && (
+            <a href={pedido.establecimientos.link_maps} target="_blank" rel="noreferrer" className="text-xs text-azul-600 mt-0.5 block">Ver en Maps →</a>
+          )}
+          <div className="border-t border-gray-100 mt-2 pt-2">
+            <div className="text-xs font-semibold text-azul-600 mb-1">Destino</div>
+            <div className="text-sm font-semibold text-gray-900">{pedido.destino_localidad}, {pedido.destino_provincia}</div>
+            {pedido.destino_link_maps && (
+              <a href={pedido.destino_link_maps} target="_blank" rel="noreferrer" className="text-xs text-azul-600 mt-0.5 block">Ver en Maps →</a>
+            )}
+          </div>
+        </Card>
+
+        {pedido?.establecimientos?.localidad && pedido?.destino_localidad && (
+          <MapRuta
+            origen={pedido.establecimientos.lat
+              ? { lat: Number(pedido.establecimientos.lat), lng: Number(pedido.establecimientos.lng) }
+              : `${pedido.establecimientos.localidad}, ${pedido.establecimientos.provincia}, Argentina`}
+            destino={pedido.destino_lat
+              ? { lat: Number(pedido.destino_lat), lng: Number(pedido.destino_lng) }
+              : `${pedido.destino_localidad}, ${pedido.destino_provincia}, Argentina`}
+            origenLabel={pedido.establecimientos.localidad}
+            destinoLabel={pedido.destino_localidad}
+          />
+        )}
+
+        {/* Hacienda */}
+        {!esAgricola && hacienda.length > 0 && (
+          <Card className="mb-3">
+            <div className="text-xs font-semibold text-azul-600 mb-2">Hacienda</div>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-gray-400 text-left"><th className="pb-1">Categoría</th><th className="pb-1">Cabezas</th><th className="pb-1">Kg/cab.</th></tr>
+              </thead>
+              <tbody>
+                {hacienda.map(h => (
+                  <tr key={h.id} className="border-t border-gray-50">
+                    <td className="py-1.5">{CATEGORIAS_HACIENDA.find(c => c.id === h.categoria)?.label}</td>
+                    <td className="py-1.5 font-medium">{h.cantidad}</td>
+                    <td className="py-1.5">{h.kg_por_cabeza} kg</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="mt-2 bg-gray-50 rounded-lg px-3 py-1.5 text-xs">Total: <strong>{formatNum(totalHacienda)} kg</strong></div>
+          </Card>
+        )}
+
+        {/* Datos operativos */}
+        {etapa === 'confirmado' && !datosOp && (
+          <Banner color="orange" title="⏳ Acción requerida" className="mb-3">
+            El productor aceptó {miOferta.camiones_aceptados} camión{miOferta.camiones_aceptados > 1 ? 'es' : ''} de tu oferta. Enviá los datos operativos para continuar.
+          </Banner>
+        )}
+
+        {etapa === 'confirmado' && !datosOp && (
+          <Button variant="azul" onClick={() => abrirModalDatosOp(false)} className="mb-3">
+            📋 Enviar datos operativos
+          </Button>
+        )}
+
+        {/* Faltan camiones (uno salió en otro viaje o se quitó) */}
+        {etapa === 'confirmado' && datosOp && (
+          <>
+            <Banner color="orange" title="⚠️ Completá los camiones" className="mb-3">
+              {camionesViaje.length < (miOferta?.camiones_aceptados || 1)
+                ? `Faltan ${(miOferta?.camiones_aceptados || 1) - camionesViaje.length} de ${miOferta?.camiones_aceptados} camión(es). Puede que uno haya salido en otro viaje.`
+                : 'Revisá los camiones y reenviá los datos.'}
+            </Banner>
+            {camionesViaje.length < (miOferta?.camiones_aceptados || 1) ? (
+              <Button variant="azul" onClick={() => abrirModalDatosOp(true)} className="mb-3">
+                🚛 Agregar camión
+              </Button>
+            ) : (
+              <Button variant="azul" className="mb-3" onClick={async () => {
+                const { error } = await supabase.rpc('marcar_datos_enviados', { p_pedido_id: id })
+                if (error) alert(error.message)
+                await cargar()
+              }}>
+                📋 Reenviar datos operativos
+              </Button>
+            )}
+          </>
+        )}
+
+        {/* Condiciones acordadas (las cargó el productor al elegirte) */}
+        {etapa && (miOferta?.forma_pago
+          ? <Condiciones oferta={miOferta} />
+          : datosOp?.forma_pago && <Condiciones oferta={datosOp} />)}
+
+        {/* Camiones asignados */}
+        {camionesViaje.length > 0 && (
+          <Card className="mb-3">
+            <div className="text-xs font-semibold text-azul-600 mb-2">Camiones asignados</div>
+            {camionesViaje.map((cv, i) => (
+              <div key={cv.id} className="border border-gray-100 rounded-[10px] p-3 mb-2">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-semibold text-gray-900">Camión {i + 1}</span>
+                  {cv.fecha_descarga ? (
+                    <Badge color="green">✅ Descarga informada</Badge>
+                  ) : etapa === 'en_camino' ? (
+                    <Badge color="blue">En camino</Badge>
+                  ) : (
+                    <Badge color="orange">Esperando documento</Badge>
+                  )}
+                </div>
+                {(() => {
+                  const inc = misIncidencias.find(inc => inc.camion_viaje_id === cv.id)
+                  if (!inc) return null
+                  const chasisOriginal = cv.chasis?.dominio || '—'
+                  const acopOriginal = cv.acoplados?.dominio
+                  const chasisNuevo = inc.nuevo_chasis_dom || (inc.nuevo_chasis_id ? '(de tu flota)' : null)
+                  const acopNuevo = inc.nuevo_acoplado_dom || (inc.nuevo_acoplado_id ? '(de tu flota)' : null)
+                  const choferNuevo = inc.nuevo_chofer_nombre
+                  return (
+                    <div className="bg-orange-50 border border-orange-200 rounded-[8px] px-2.5 py-2 mb-1.5">
+                      <div className="text-[11px] font-bold text-orange-700 mb-1">
+                        ⚠️ Camión {i+1} ({chasisOriginal}{acopOriginal ? ` + ${acopOriginal}` : ''}) — Incidencia: {inc.tipo}
+                      </div>
+                      {inc.descripcion && <div className="text-[11px] text-orange-600 mb-1">"{inc.descripcion}"</div>}
+                      {(chasisNuevo || acopNuevo) && (
+                        <div className="text-[11px] text-gray-700">
+                          <b>Nuevo equipo:</b> {chasisNuevo || chasisOriginal}{acopNuevo ? ` + ${acopNuevo}` : ''}
+                          {inc.nuevo_chasis_tara || inc.nuevo_acoplado_tara
+                            ? ` · tara: ${Number(inc.nuevo_chasis_tara||0)+Number(inc.nuevo_acoplado_tara||0)} kg` : ''}
+                        </div>
+                      )}
+                      {choferNuevo && <div className="text-[11px] text-gray-700"><b>Nuevo chofer:</b> {choferNuevo}{inc.nuevo_chofer_dni ? ` · DNI: ${inc.nuevo_chofer_dni}` : ''}</div>}
+                      <div className="text-[11px] text-orange-500 mt-1">Esperando nueva CPE del productor</div>
+                    </div>
+                  )
+                })()}
+                <div className="text-xs text-gray-500">
+                  🚛 {cv.chasis?.dominio}{cv.acoplados ? ` + ${cv.acoplados.dominio}` : ''}
+                  {' · '}{VEHICULOS[equipoDe(cv.chasis?.tipo, cv.acoplados?.tipo)] || ''}
+                  {(cv.chasis?.tara_kg || cv.acoplados?.tara_kg) ? ` · tara ${Number(cv.chasis?.tara_kg || 0) + Number(cv.acoplados?.tara_kg || 0)} kg` : ''}
+                </div>
+                {etapa === 'confirmado' && (
+                  <button onClick={() => quitarCamion(cv.id)} className="text-[11px] text-red-600 font-semibold mt-0.5">
+                    Quitar camión
+                  </button>
+                )}
+                <div className="text-xs text-gray-500 mt-0.5">👤 {cv.choferes?.nombre} {cv.choferes?.apellido}</div>
+                {cv.kilos_asignados && <div className="text-xs text-gray-400 mt-0.5">⚖️ {formatNum(cv.kilos_asignados)} kg</div>}
+                {(() => {
+                  const doc = documentos.find(d => d.camion_viaje_id === cv.id)
+                  return doc ? (
+                    <button onClick={() => descargarDoc(doc)}
+                      className="mt-1.5 w-full text-xs text-azul-600 font-semibold border border-azul-200 rounded-lg px-2 py-1.5 bg-azul-50 text-left">
+                      📄 Descargar {doc.tipo?.toUpperCase()} — {doc.nombre_original}
+                    </button>
+                  ) : null
+                })()}
+                {!cv.fecha_descarga && etapa === 'en_camino' && (
+                  <>
+                  <Button size="sm" variant="danger" onClick={() => { setModalIncidencia(cv.id); setFormInc(f => ({...f, tipo:'rotura', descripcion:'', chasisId:'', chasisDom:'', chasisTara:'', acopladoId:'', acopladoDom:'', acopladoTara:'', choferId:'', choferNombre:'', choferDni:''})) }} className="mt-2">
+                    ⚠ Reportar incidencia
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => informarDescarga(cv.id)} className="mt-1">
+                    Informar descarga
+                  </Button>
+                  </>
+                )}
+                {cv.fecha_descarga && (
+                  <div className="text-xs text-verde-600 mt-1">Descargado: {formatFecha(cv.fecha_descarga)}</div>
+                )}
+              </div>
+            ))}
+          </Card>
+        )}
+
+        {etapa === 'descargado' && !finalizado && (
+          <Banner color="purple" title="📦 Descarga informada">
+            Esperando que el productor confirme la descarga.
+          </Banner>
+        )}
+
+        {etapa && finalizado && (
+          <>
+            <Banner color="green" title="✅ Pedido finalizado">
+              El productor confirmó la descarga. ¡Gracias por usar Carreta!
+            </Banner>
+            {yaCalifique && (
+              <div className="text-[11px] text-verde-600 font-medium mb-2">✓ Productor calificado</div>
+            )}
+            <CalifDisplay pedidoId={id} className="mb-2" />
+          </>
+        )}
+
+        {/* Cancelar viaje (solo Confirmado / Datos enviados) */}
+        {['confirmado','datos_enviados'].includes(etapa) && !finalizado && pedido.estado !== 'cancelado' && (
+          <Button variant="danger" onClick={() => setModalCancelar(true)} className="mt-2">
+            Cancelar viaje
+          </Button>
+        )}
+      </Body>
+
+      {/* Modal datos operativos */}
+      <Modal open={modalDatosOp} onClose={() => setModalDatosOp(false)} title={modoReemplazo ? 'Agregar camión' : 'Datos operativos'}>
+        {miOferta?.equipos?.length > 0 && (
+          <Banner color="blue" className="mb-3">
+            Ofreciste: <b>{miOferta.equipos.map(e => VEHICULOS[e] || e).join(', ')}</b>. Cada camión tiene que coincidir.
+          </Banner>
+        )}
+
+        <div className="text-xs font-semibold text-azul-600 mb-2 mt-1">Camiones asignados</div>
+        {chasis.length === 0 ? (
+          <Banner color="orange">
+            No tenés chasis cargados en tu perfil. Agregá vehículos primero.
+          </Banner>
+        ) : (
+          formCamiones.map((c, i) => (
+            <div key={i} className="border border-gray-100 rounded-[10px] p-3 mb-2">
+              <div className="text-xs font-semibold text-gray-700 mb-2">Camión {i + 1}</div>
+              <Field label="Chasis">
+                <Select value={c.chasis_id} onChange={e => setFC(i, 'chasis_id', e.target.value)}>
+                  <option value="">Seleccioná</option>
+                  {chasis.map(ch => (
+                    <option key={ch.id} value={ch.id} disabled={!!enViaje('chasis_id', ch.id) || yaUsado('chasis_id', ch.id, i)}>
+                      {ch.dominio} · {TIPOS_CHASIS[ch.tipo] || 'Solo chasis'}{ch.tara_kg ? ` · ${ch.tara_kg} kg` : ''}{enViaje('chasis_id', ch.id)}{yaUsado('chasis_id', ch.id, i) ? ' (ya elegido)' : ''}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Remolque">
+                <Select value={c.acoplado_id} onChange={e => setFC(i, 'acoplado_id', e.target.value)}>
+                  <option value="">Seleccioná</option>
+                  {acoplados.map(a => (
+                    <option key={a.id} value={a.id} disabled={!!enViaje('acoplado_id', a.id) || yaUsado('acoplado_id', a.id, i)}>
+                      {a.dominio} · {VEHICULOS[a.tipo] || 'sin tipo'}{a.tara_kg ? ` · ${a.tara_kg} kg` : ''}{enViaje('acoplado_id', a.id)}{yaUsado('acoplado_id', a.id, i) ? ' (ya elegido)' : ''}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Chofer">
+                <Select value={c.chofer_id} onChange={e => setFC(i, 'chofer_id', e.target.value)}>
+                  <option value="">Seleccioná</option>
+                  {choferes.map(ch => (
+                    <option key={ch.id} value={ch.id} disabled={!!enViaje('chofer_id', ch.id) || yaUsado('chofer_id', ch.id, i)}>
+                      {ch.nombre} {ch.apellido}{enViaje('chofer_id', ch.id)}{yaUsado('chofer_id', ch.id, i) ? ' (ya elegido)' : ''}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+          ))
+        )}
+
+        {error && <Banner color="red" className="mb-3">{error}</Banner>}
+        <Button onClick={enviarDatosOp} disabled={saving} variant="azul">
+          {saving ? 'Enviando…' : modoReemplazo ? 'Agregar y reenviar' : 'Enviar datos operativos'}
+        </Button>
+        <Button variant="ghost" onClick={() => setModalDatosOp(false)} className="mt-2">Cancelar</Button>
+      </Modal>
+
+      {/* Modal cancelar */}
+      {/* Notas privadas */}
+      {(etapa === 'finalizado' || pedido?.estado === 'cancelado') && usuario && (
+        <NotasPedido pedidoId={pedido?.id} rol="transportista" usuarioId={usuario?.id} />
+      )}
+
+      <ModalCalificar
+        open={modalCalif}
+        onClose={() => setModalCalif(false)}
+        ofertaId={miOferta?.id}
+        rol="transportista"
+        pedidoNumero={pedido?.numero}
+        obligatorio
+        onCalificado={() => { setModalCalif(false); setYaCalifique(true); cargar() }}
+      />
+
+      <ModalCancelar
+        open={modalCancelar}
+        onClose={() => setModalCancelar(false)}
+        pedidoId={id}
+        rol="transportista"
+        onCancelado={() => { setModalCancelar(false); navigate('/transportista/pedidos') }}
+      />
+
+      {/* Modal monto final */}
+      <Modal open={modalMonto} onClose={() => { setModalMonto(false); cargar() }} title="Monto final del viaje">
+        <div className="text-xs text-gray-500 mb-3">Monto final acordado con el productor. Podés omitirlo y cargarlo después.</div>
+        <Field label="Monto final ($)">
+          <Input type="number" placeholder="Ej: 450000" value={montoFinal}
+            onChange={e => setMontoFinal(e.target.value)} />
+        </Field>
+        <Button onClick={async () => {
+          if (miOferta?.id && montoFinal) {
+            await supabase.from('ofertas').update({ monto_final: Number(montoFinal) }).eq('id', miOferta.id)
+          }
+          setModalMonto(false); await cargar()
+        }}>
+          {montoFinal ? 'Guardar monto' : 'Omitir por ahora'}
+        </Button>
+      </Modal>
+
+      {/* Modal incidencia */}
+      <Modal open={!!modalIncidencia} onClose={() => setModalIncidencia(null)} title="Reportar incidencia">
+        <div className="text-xs text-gray-500 mb-4">
+          Indicá qué pasó y los datos del vehículo y chofer de reemplazo. El productor recibirá un aviso y deberá emitir una nueva CPE.
+        </div>
+
+        <Field label="Tipo de incidencia">
+          <Select value={formInc.tipo} onChange={e => setFormInc(f => ({...f, tipo: e.target.value}))}>
+            <option value="rotura">Rotura mecánica</option>
+            <option value="accidente">Accidente</option>
+            <option value="otro">Otro</option>
+          </Select>
+        </Field>
+
+        <Field label="Descripción (opcional)">
+          <Textarea rows={2} placeholder="Detallá qué ocurrió…"
+            value={formInc.descripcion} onChange={e => setFormInc(f => ({...f, descripcion: e.target.value}))} />
+        </Field>
+
+        {pedido?.tipo_actividad !== 'ganadero' && (<>
+          <div className="text-xs font-semibold text-gray-700 mb-2 mt-2">Chasis de reemplazo</div>
+          <Field label="Chasis de tu flota">
+            <Select value={formInc.chasisId} onChange={e => setFormInc(f => ({...f, chasisId: e.target.value, chasisDom:'', chasisTara:''}))}>
+              <option value="">Otro dominio (ingresar manualmente)</option>
+              {chasis.filter(c => !enViaje('chasis_id', c.id)).map(c => (
+                <option key={c.id} value={c.id}>{c.dominio} · {TIPOS_CHASIS[c.tipo] || ''}{c.tara_kg ? ` · ${c.tara_kg}kg` : ''}</option>
+              ))}
+            </Select>
+          </Field>
+          {!formInc.chasisId && (
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <Field label="Dominio"><Input placeholder="Ej: AB123CD" value={formInc.chasisDom} onChange={e => setFormInc(f => ({...f, chasisDom: e.target.value.toUpperCase()}))} /></Field>
+              <Field label="Tara (kg)"><Input type="number" placeholder="Ej: 9500" value={formInc.chasisTara} onChange={e => setFormInc(f => ({...f, chasisTara: e.target.value}))} /></Field>
+            </div>
+          )}
+
+          <div className="text-xs font-semibold text-gray-700 mb-2 mt-2">Remolque de reemplazo</div>
+          <Field label="Remolque de tu flota">
+            <Select value={formInc.acopladoId} onChange={e => setFormInc(f => ({...f, acopladoId: e.target.value, acopladoDom:'', acopladoTara:''}))}>
+              <option value="">Otro dominio (ingresar manualmente)</option>
+              {acoplados.filter(a => !enViaje('acoplado_id', a.id)).map(a => (
+                <option key={a.id} value={a.id}>{a.dominio} · {VEHICULOS[a.tipo] || ''}{a.tara_kg ? ` · ${a.tara_kg}kg` : ''}</option>
+              ))}
+            </Select>
+          </Field>
+          {!formInc.acopladoId && (
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <Field label="Dominio"><Input placeholder="Ej: AC456EF" value={formInc.acopladoDom} onChange={e => setFormInc(f => ({...f, acopladoDom: e.target.value.toUpperCase()}))} /></Field>
+              <Field label="Tara (kg)"><Input type="number" placeholder="Ej: 7000" value={formInc.acopladoTara} onChange={e => setFormInc(f => ({...f, acopladoTara: e.target.value}))} /></Field>
+            </div>
+          )}
+        </>)}
+
+        <div className="text-xs font-semibold text-gray-700 mb-2 mt-2">Chofer de reemplazo</div>
+        <Field label="Chofer de tu flota">
+          <Select value={formInc.choferId} onChange={e => setFormInc(f => ({...f, choferId: e.target.value, choferNombre:'', choferDni:''}))}>
+            <option value="">Otro chofer (ingresar manualmente)</option>
+            {choferes.map(c => (
+              <option key={c.id} value={c.id}>{c.nombre} {c.apellido}</option>
+            ))}
+          </Select>
+        </Field>
+        {!formInc.choferId && (
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <Field label="Nombre y apellido"><Input placeholder="Ej: Juan Pérez" value={formInc.choferNombre} onChange={e => setFormInc(f => ({...f, choferNombre: e.target.value}))} /></Field>
+            <Field label="DNI"><Input placeholder="Ej: 30123456" value={formInc.choferDni} onChange={e => setFormInc(f => ({...f, choferDni: e.target.value.replace(/\D/g,'')}))} /></Field>
+          </div>
+        )}
+
+        {savingInc && <div className="text-xs text-gray-400 mb-2">Enviando…</div>}
+
+        <Button onClick={async () => {
+          setSavingInc(true)
+          const { error } = await supabase.rpc('reportar_incidencia', {
+            p_camion_viaje_id:   modalIncidencia,
+            p_tipo:              formInc.tipo,
+            p_descripcion:       formInc.descripcion || null,
+            p_nuevo_chasis_id:   formInc.chasisId || null,
+            p_nuevo_chasis_dom:  !formInc.chasisId ? (formInc.chasisDom || null) : null,
+            p_nuevo_chasis_tara: !formInc.chasisId && formInc.chasisTara ? Number(formInc.chasisTara) : null,
+            p_nuevo_acoplado_id:  formInc.acopladoId || null,
+            p_nuevo_acoplado_dom: !formInc.acopladoId ? (formInc.acopladoDom || null) : null,
+            p_nuevo_acoplado_tara: !formInc.acopladoId && formInc.acopladoTara ? Number(formInc.acopladoTara) : null,
+            p_nuevo_chofer_id:    formInc.choferId || null,
+            p_nuevo_chofer_nombre: !formInc.choferId ? (formInc.choferNombre || null) : null,
+            p_nuevo_chofer_dni:    !formInc.choferId ? (formInc.choferDni || null) : null,
+          })
+          setSavingInc(false)
+          if (error) { alert(error.message); return }
+          setModalIncidencia(null)
+          await cargar()
+        }} disabled={savingInc}>
+          Enviar incidencia
+        </Button>
+        <Button variant="ghost" onClick={() => setModalIncidencia(null)} className="mt-2">Cancelar</Button>
+      </Modal>
+
+      <BottomTabs rol="transportista" />
+    </Shell>
+  )
+}

@@ -1,0 +1,831 @@
+import { useEffect, useState } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../context/AuthContext'
+import Shell, { Body } from '../../components/layout/Shell'
+import Topbar from '../../components/layout/Topbar'
+import BottomTabs from '../../components/layout/BottomTabs'
+import Card from '../../components/ui/Card'
+import Badge from '../../components/ui/Badge'
+import Button from '../../components/ui/Button'
+import Banner from '../../components/ui/Banner'
+import Modal from '../../components/ui/Modal'
+import Field, { Input, Select, Textarea } from '../../components/ui/Field'
+import Route from '../../components/ui/Route'
+import { ESTADOS_PEDIDO, ESTADOS_OFERTA, ETAPAS_TRANSPORTISTA, CATEGORIAS_HACIENDA } from '../../utils/constants'
+import ModalCancelar from '../../components/pedidos/ModalCancelar'
+import { formatNroPedido, formatFecha, formatNum } from '../../utils/format'
+import { tituloPedido, iconoPedido, bgPedido, documentoDe } from '../../utils/pedido'
+import Contador from '../../components/ui/Contador'
+import { TIPOS_CHASIS, VEHICULOS, FORMAS_PAGO } from '../../utils/constants'
+import Contacto from '../../components/pedidos/Contacto'
+import Condiciones from '../../components/pedidos/Condiciones'
+import NotasPedido from '../../components/pedidos/NotasPedido'
+import CalifDisplay from '../../components/ui/CalifDisplay'
+import ModalCalificar from '../../components/pedidos/ModalCalificar'
+import MapRuta from '../../components/ui/MapRuta'
+
+export default function DetallePedido() {
+  const { usuario } = useAuth()
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const [pedido, setPedido] = useState(null)
+  const [hacienda, setHacienda] = useState([])
+  const [ofertas, setOfertas] = useState([])
+  const [datosOps, setDatosOps] = useState([])
+  const [aceptando, setAceptando] = useState(null)   // { oferta, max }
+  const [formAcuerdo, setFormAcuerdo] = useState({ cantidad: '', precio: '', forma_pago: '', monto: '', condiciones: '' })
+  const [errAcuerdo, setErrAcuerdo] = useState('')
+  const [savingAcuerdo, setSavingAcuerdo] = useState(false)
+  const [camionesViaje, setCamionesViaje] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [modalDoc, setModalDoc] = useState(false)
+  const [camionSeleccionado, setCamionSeleccionado] = useState(null)
+  const [kilosInput, setKilosInput] = useState('')
+  const [savingDoc, setSavingDoc] = useState(false)
+  const [modalCancelar, setModalCancelar] = useState(false)
+  const [documentos, setDocumentos] = useState([])
+  const [incidencias, setIncidencias] = useState([])
+  const [notasOferta, setNotasOferta] = useState({})
+  const [guardandoNota, setGuardandoNota] = useState({})
+  const [archivoDoc, setArchivoDoc] = useState(null)
+  const [confirmando, setConfirmando] = useState(false)
+  const [modalCalif, setModalCalif] = useState(null)
+
+  useEffect(() => { cargar() }, [id])
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`detalle-prod-${id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ofertas', filter: `pedido_id=eq.${id}` }, () => cargar())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos', filter: `id=eq.${id}` }, () => cargar())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'camiones_viaje' }, () => cargar())
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [id])
+
+  const abrirDoc = (cv) => {
+    setCamionSeleccionado(cv)
+    setKilosInput(cv.kilos_asignados || '')
+    setModalDoc(true)
+  }
+
+  const guardarKilos = async () => {
+    if (!kilosInput) return
+    setSavingDoc(true)
+
+    try {
+      await supabase.from('camiones_viaje')
+        .update({ kilos_asignados: Number(kilosInput) })
+        .eq('id', camionSeleccionado.id)
+
+      if (archivoDoc) {
+        const fd = new FormData()
+        fd.append('file', archivoDoc)
+        fd.append('pedido_id', id)
+        fd.append('camion_id', camionSeleccionado.id)
+        fd.append('tipo', documentoDe(pedido).tipo)
+        fd.append('kilos', kilosInput)
+
+        // Refrescar sesión antes de subir (evita "Sesión inválida" por token vencido)
+        await supabase.auth.refreshSession()
+        const { error } = await supabase.functions.invoke('upload-documento', {
+          body: fd,
+        })
+
+        if (error) {
+          let msg = error.message
+          try { msg = (await error.context.json()).error || msg } catch {}
+          throw new Error(msg)
+        }
+      }
+
+      // Paso 5: si todos los camiones tienen documento → En camino
+      const { error: errCamino } = await supabase.rpc('marcar_en_camino', { p_pedido_id: id })
+      // Si había incidencia activa en algún camión, marcarla resuelta
+      const idsConInc = camionesViaje.map(c => c.id)
+      if (idsConInc.length) {
+        await supabase.from('incidencias').update({ resuelta: true }).in('camion_viaje_id', idsConInc).eq('resuelta', false)
+      }
+      if (errCamino) throw errCamino
+
+      setModalDoc(false)
+      setArchivoDoc(null)
+      await cargar()
+    } catch (e) {
+      alert(e.message)
+    } finally {
+      setSavingDoc(false)
+    }
+  }
+
+  async function cargar() {
+    setLoading(true)
+    const { data: p } = await supabase
+      .from('pedidos')
+      .select(`
+        *,
+        establecimientos(nombre, localidad, provincia, departamento, link_maps, telefono),
+        productores(usuario_id),
+        transportista_directo_info:transportistas!pedidos_transportista_directo_fkey(id, usuario_id, usuarios(nombre, apellido, razon_social, telefono, cuit))
+      `)
+      .eq('id', id)
+      .single()
+
+    // Solo el productor dueño puede ver este detalle
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!p || p.productores?.usuario_id !== session?.user?.id) {
+      setPedido(null)
+      setLoading(false)
+      return
+    }
+    setPedido(p)
+
+    if (p?.tipo_actividad === 'ganadero') {
+      const { data: h } = await supabase
+        .from('pedidos_hacienda')
+        .select('*')
+        .eq('pedido_id', id)
+      setHacienda(h || [])
+    }
+
+    const { data: dops } = await supabase
+      .from('datos_operativos')
+      .select('*')
+      .eq('pedido_id', id)
+    setDatosOps(dops || [])
+
+    let cv = []
+    if (dops?.length) {
+      const { data } = await supabase
+        .from('camiones_viaje')
+        .select('*, chasis(dominio, tipo, tara_kg), acoplados(dominio, tipo, tara_kg), choferes(nombre, apellido, dni, cuit)')
+        .in('datos_operativos_id', dops.map(d => d.id))
+      cv = data || []
+    }
+    setCamionesViaje(cv)
+
+    if (cv.length) {
+      const { data: docs } = await supabase
+        .from('documentos').select('*')
+        .in('camion_viaje_id', cv.map(c => c.id))
+      setDocumentos(docs || [])
+      // Cargar incidencias activas
+      const { data: incs } = await supabase
+        .from('incidencias').select('*')
+        .in('camion_viaje_id', cv.map(c => c.id))
+        .eq('resuelta', false)
+      setIncidencias(incs || [])
+    } else {
+      setDocumentos([])
+      setIncidencias([])
+    }
+
+    const { data: o } = await supabase
+      .from('ofertas')
+      .select('*, transportistas(usuario_id, usuarios(nombre, apellido, razon_social, cuit, telefono))')
+      .eq('pedido_id', id)
+      .order('created_at', { ascending: false })
+    // Marcar ofertas ya calificadas por el productor (todas, sin filtrar por etapa)
+    let o2 = o || []
+    let ya = new Set()
+    if (o2.length) {
+      const ids = o2.map(x => x.id)
+      const { data: mis } = await supabase.from('calificaciones').select('oferta_id')
+        .in('oferta_id', ids).eq('calificador_rol', 'productor')
+      ya = new Set((mis || []).map(x => x.oferta_id))
+      o2 = o2.map(x => ({ ...x, calif_prod: ya.has(x.id) }))
+    }
+    setOfertas(o2)
+    // Cargar notas
+    const notasObj = {}
+    for (const of2 of (o2 || [])) { if (of2.nota_productor) notasObj[of2.id] = of2.nota_productor }
+    setNotasOferta(notasObj)
+    // Auto-abrir calificación si hay oferta finalizada sin calificar
+    const pendiente = o2.find(x => x.etapa === 'finalizado' && !ya.has(x.id))
+    if (pendiente) setModalCalif({ ofertaId: pendiente.id, numero: pedido?.numero || 0 })
+
+    setLoading(false)
+  }
+
+  // Paso 3: elegir transportista con las condiciones acordadas por teléfono
+  const guardarNotaOferta = async (ofertaId, texto) => {
+    setGuardandoNota(g => ({ ...g, [ofertaId]: true }))
+    await supabase.from('ofertas').update({ nota_productor: texto || null }).eq('id', ofertaId)
+    setGuardandoNota(g => ({ ...g, [ofertaId]: false }))
+  }
+
+  const abrirAceptar = (oferta, max) => {
+    setAceptando({ oferta, max })
+    setFormAcuerdo({ cantidad: String(max), precio: '', forma_pago: '', monto: '', condiciones: '' })
+    setErrAcuerdo('')
+  }
+
+  const confirmarOferta = async () => {
+    const { oferta, max } = aceptando
+    const cant = Number(formAcuerdo.cantidad)
+    if (!cant || cant < 1 || cant > max) { setErrAcuerdo(`Podés aceptar entre 1 y ${max} camión(es)`); return }
+    if (!formAcuerdo.precio.trim()) { setErrAcuerdo('Ingresá el precio acordado'); return }
+    if (!formAcuerdo.forma_pago) { setErrAcuerdo('Elegí la forma de pago'); return }
+    setSavingAcuerdo(true)
+    const { error } = await supabase.rpc('confirmar_oferta', {
+      p_oferta_id: oferta.id,
+      p_cantidad: cant,
+      p_precio: formAcuerdo.precio.trim(),
+      p_forma_pago: formAcuerdo.forma_pago,
+      p_monto: formAcuerdo.monto ? Number(formAcuerdo.monto) : null,
+      p_condiciones: formAcuerdo.condiciones.trim() || null,
+    })
+    setSavingAcuerdo(false)
+    if (error) { setErrAcuerdo(error.message); return }
+    setAceptando(null)
+    await cargar()
+  }
+
+  const cerrarCupo = async () => {
+    if (!confirm('¿Cerrar cupo con los camiones aceptados hasta ahora? Las demás ofertas quedan en pausa.')) return
+    const { error } = await supabase.rpc('cerrar_cupo', { p_pedido_id: id })
+    if (error) { alert(error.message); return }
+    await cargar()
+  }
+
+  // Paso 7: productor confirma descarga de un transportista → su viaje Finalizado
+  const confirmarDescarga = async (ofertaId) => {
+    const o = ofertas.find(x => x.id === ofertaId)
+    if (!confirm(`¿Confirmás la descarga de ${o ? nombreT(o) : 'este transportista'}?\n\nSu viaje queda Finalizado y no se puede deshacer.`)) return
+    setConfirmando(ofertaId)
+    const { error } = await supabase.rpc('confirmar_descarga_transportista', { p_oferta_id: ofertaId })
+    setConfirmando(false)
+    if (error) { alert(error.message); return }
+    await cargar()
+  }
+
+  if (loading) return (
+    <Shell>
+      <Topbar title="Pedido" showBack backTo="/productor/pedidos" accent="verde" />
+      <Body><p className="text-xs text-gray-400 text-center py-10">Cargando…</p></Body>
+      <BottomTabs rol="productor" />
+    </Shell>
+  )
+
+  if (!pedido) return (
+    <Shell>
+      <Topbar title="Pedido" showBack backTo="/productor/pedidos" accent="verde" />
+      <Body><Banner color="red">No se encontró el pedido.</Banner></Body>
+      <BottomTabs rol="productor" />
+    </Shell>
+  )
+
+  const est = ESTADOS_PEDIDO[pedido.estado] || { label: pedido.estado, color: 'gray' }
+  const esAgricola = pedido.tipo_actividad === 'agricola'
+  const nombreT = (o) => o.transportistas?.usuarios?.razon_social ||
+    `${o.transportistas?.usuarios?.nombre || ''} ${o.transportistas?.usuarios?.apellido || ''}`.trim()
+  const aceptadas = ofertas.filter(o => o.estado === 'seleccionada')
+  const cubierto = aceptadas.reduce((a, o) => a + (o.camiones_aceptados || 0), 0)
+  const restante = Math.max(0, pedido.camiones_necesarios - cubierto)
+  const pedidoAbierto = !['cancelado','completado'].includes(pedido.estado)
+  const cupoAbierto = pedidoAbierto && !pedido.cupo_cerrado
+  const puedeCancelar = pedidoAbierto && (
+    aceptadas.length === 0 || aceptadas.some(o => ['confirmado','datos_enviados'].includes(o.etapa))
+  )
+  const docLabel = documentoDe(pedido).label
+  const totalHacienda = hacienda.reduce((a, h) => a + h.cantidad * h.kg_por_cabeza, 0)
+
+  return (
+    <Shell>
+      <Topbar title={`Pedido ${formatNroPedido(pedido.numero)}`} showBack backTo="/productor/pedidos" accent="verde" />
+      <Body>
+
+        {/* Encabezado */}
+        <Card className="mb-3">
+          <div className="flex items-start gap-3">
+            <div className={`w-12 h-12 rounded-[10px] flex items-center justify-center text-2xl flex-shrink-0 ${bgPedido(pedido)}`}>
+              {iconoPedido(pedido)}
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-base font-bold text-gray-900">
+                  {tituloPedido(pedido)}
+                </span>
+                <Badge color={est.color}>{est.label}</Badge>
+              </div>
+              <Route
+                origen={`${pedido.establecimientos?.nombre}, ${pedido.establecimientos?.provincia}`}
+                destino={`${pedido.destino_localidad}, ${pedido.destino_provincia}`}
+              />
+              <div className="flex gap-2 mt-2 flex-wrap">
+                <Badge color="gray">🚛 {pedido.camiones_necesarios} camión{pedido.camiones_necesarios > 1 ? 'es' : ''}</Badge>
+                <Badge color={pedido.modo_publicacion === 'directo' ? 'blue' : 'gray'}>
+                  {pedido.modo_publicacion === 'directo' ? '🎯 Directo' : '🌐 General'}
+                </Badge>
+                <Badge color="gray">📅 {formatFecha(pedido.fecha_entrega)}</Badge>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Detalle agrícola */}
+
+        {pedido.tipo_actividad !== 'ganadero' && pedido.kilos_estimados && (
+          <Card className="mb-3">
+            <div className="text-xs font-semibold text-azul-600 mb-2">Detalle de carga</div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Kilos estimados</span>
+              <span className="font-semibold">{formatNum(pedido.kilos_estimados)} kg</span>
+            </div>
+          </Card>
+        )}
+
+        {/* Detalle hacienda */}
+        {!esAgricola && hacienda.length > 0 && (
+          <Card className="mb-3">
+            <div className="text-xs font-semibold text-azul-600 mb-2">Detalle de hacienda</div>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-gray-400 text-left">
+                  <th className="pb-1">Categoría</th>
+                  <th className="pb-1">Cabezas</th>
+                  <th className="pb-1">Kg/cab.</th>
+                  <th className="pb-1">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {hacienda.map(h => (
+                  <tr key={h.id} className="border-t border-gray-50">
+                    <td className="py-1.5 text-gray-700">{CATEGORIAS_HACIENDA.find(c => c.id === h.categoria)?.label || h.categoria}</td>
+                    <td className="py-1.5 font-medium">{h.cantidad}</td>
+                    <td className="py-1.5">{h.kg_por_cabeza} kg</td>
+                    <td className="py-1.5 font-medium">{formatNum(h.cantidad * h.kg_por_cabeza)} kg</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="mt-2 bg-gray-50 rounded-lg px-3 py-1.5 text-xs text-gray-600">
+              Total: <strong>{formatNum(totalHacienda)} kg</strong>
+            </div>
+          </Card>
+        )}
+
+        {/* Establecimiento */}
+        <Card className="mb-3">
+          <div className="text-xs font-semibold text-azul-600 mb-2">Establecimiento de origen</div>
+          <div className="text-sm font-semibold text-gray-900">{pedido.establecimientos?.nombre}</div>
+          <div className="text-xs text-gray-500 mt-0.5">📍 {pedido.establecimientos?.localidad}, {pedido.establecimientos?.departamento}, {pedido.establecimientos?.provincia}</div>
+          {pedido.establecimientos?.telefono && <div className="text-xs text-gray-400 mt-0.5">📞 {pedido.establecimientos.telefono}</div>}
+          {pedido.establecimientos?.link_maps && (
+            <a href={pedido.establecimientos.link_maps} target="_blank" rel="noreferrer" className="text-xs text-azul-600 mt-0.5 block">Ver en Maps</a>
+          )}
+        </Card>
+
+        {/* Destino */}
+        <Card className="mb-3">
+          <div className="text-xs font-semibold text-azul-600 mb-2">Destino</div>
+          <div className="text-sm font-semibold text-gray-900">{pedido.destino_localidad}, {pedido.destino_provincia}</div>
+          {pedido.destino_link_maps && (
+            <a href={pedido.destino_link_maps} target="_blank" rel="noreferrer" className="text-xs text-azul-600 mt-0.5 block">Ver en Maps</a>
+          )}
+        </Card>
+
+        {/* Mapa de ruta */}
+        {pedido.establecimientos?.localidad && pedido.destino_localidad && (
+          <MapRuta
+            origen={pedido.establecimientos.lat
+              ? { lat: Number(pedido.establecimientos.lat), lng: Number(pedido.establecimientos.lng) }
+              : `${pedido.establecimientos.localidad}, ${pedido.establecimientos.provincia}, Argentina`}
+            destino={pedido.destino_lat
+              ? { lat: Number(pedido.destino_lat), lng: Number(pedido.destino_lng) }
+              : `${pedido.destino_localidad}, ${pedido.destino_provincia}, Argentina`}
+            origenLabel={pedido.establecimientos.localidad}
+            destinoLabel={pedido.destino_localidad}
+          />
+        )}
+
+        {/* Observaciones */}
+        {pedido.observaciones && (
+          <Card className="mb-3">
+            <div className="text-xs font-semibold text-azul-600 mb-1">Observaciones</div>
+            <div className="text-sm text-gray-700">{pedido.observaciones}</div>
+          </Card>
+        )}
+
+        {/* Cupo */}
+        {pedidoAbierto && (
+          <Card className="mb-3">
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="text-xs font-semibold text-azul-600">Camiones cubiertos</div>
+              <div className="text-sm font-bold text-gray-900">{cubierto} / {pedido.camiones_necesarios}</div>
+            </div>
+            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-full bg-verde-600 transition-all"
+                style={{ width: `${Math.min(100, (cubierto / pedido.camiones_necesarios) * 100)}%` }} />
+            </div>
+            {pedido.cupo_cerrado ? (
+              <div className="text-[11px] text-gray-500 mt-1.5">🔒 Cupo cerrado{cubierto < pedido.camiones_necesarios ? ' (incompleto)' : ''}</div>
+            ) : cubierto > 0 && (
+              <Button size="sm" variant="secondary" onClick={cerrarCupo} className="mt-2">
+                🔒 Cerrar cupo en {cubierto} camión{cubierto > 1 ? 'es' : ''}
+              </Button>
+            )}
+          </Card>
+        )}
+
+        {/* Ofertas */}
+        <Card className="mb-3">
+          <div className="text-xs font-semibold text-azul-600 mb-2">
+            Ofertas recibidas ({ofertas.length})
+          </div>
+          {ofertas.length === 0 ? (
+            <div className="text-center py-4">
+              <div className="text-2xl mb-1 opacity-40">⏳</div>
+              <div className="text-xs text-gray-400">Esperando ofertas de transportistas</div>
+            </div>
+          ) : (
+            ofertas.map(o => {
+              const eo = ESTADOS_OFERTA[o.estado] || { label: o.estado, color: 'gray' }
+              const maxAceptable = Math.min(o.camiones_ofrecidos || 1, restante)
+              return (
+                <div key={o.id} className="border border-gray-100 rounded-[10px] p-3 mb-2">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900 cursor-pointer text-azul-700 underline"
+                        onClick={() => navigate(`/perfil/transportista/${o.transportista_id}`)}>
+                        {nombreT(o)}
+                      </div>
+                      {o.transportistas?.usuarios?.cuit && (
+                        <div className="text-xs text-gray-400">CUIT: {o.transportistas.usuarios.cuit}</div>
+                      )}
+                      <Contador usuarioId={o.transportistas?.usuario_id} rol="transportista" className="mt-0.5" />
+                      <CalifDisplay transportistaId={o.transportista_id} className="mt-0.5" />
+                      {o.fuera_de_zona && (
+                        <div className="mt-0.5">
+                          <Badge color="orange">Fuera de zona{o.base_transportista ? ` — Base: ${o.base_transportista}` : ''}</Badge>
+                        </div>
+                      )}
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        {o.camiones_ofrecidos} camión{o.camiones_ofrecidos > 1 ? 'es' : ''} ofrecido{o.camiones_ofrecidos > 1 ? 's' : ''}
+                        {o.equipos?.length > 0 && ` · ${o.equipos.map(e => VEHICULOS[e] || e).join(', ')}`}
+                        {o.precio_tn && ` · $${formatNum(o.precio_tn)}/tn`}
+                        {o.precio_km && ` · $${formatNum(o.precio_km)}/km`}
+                        {o.km_estimados && ` · ${formatNum(o.km_estimados)} km`}
+                        {o.precio_km && o.km_estimados && (
+                          <span className="font-semibold text-gray-700"> · Total: ${formatNum(o.precio_km * o.km_estimados)}</span>
+                        )}
+                      </div>
+                      {o.estado === 'seleccionada' && (
+                        <div className="text-xs text-verde-700 font-semibold mt-0.5">
+                          ✓ {o.camiones_aceptados} aceptado{o.camiones_aceptados > 1 ? 's' : ''}
+                        </div>
+                      )}
+                  {(notasOferta[o.id] || o.nota_productor) && !['enviada','en_pausa'].includes(o.estado) && (
+                    <div className="text-xs bg-amber-50 border border-amber-100 rounded-[8px] px-2.5 py-1.5 mt-1 text-gray-700">
+                      📝 {notasOferta[o.id] || o.nota_productor}
+                    </div>
+                  )}
+                    </div>
+                    <Badge color={eo.color}>{eo.label}</Badge>
+                  </div>
+                  {o.observaciones && <div className="text-xs text-gray-500 mb-2">{o.observaciones}</div>}
+                  {['enviada','en_pausa'].includes(o.estado) && (
+                    <Contacto telefono={o.transportistas?.usuarios?.telefono} className="mb-2"
+                      mensaje={`Hola, te contacto por tu postulación al pedido #${String(pedido.numero).padStart(4, '0')} en Carreta.`} />
+                  )}
+                  <div className="mt-1 mb-2">
+                    <textarea rows={2}
+                      placeholder="📝 Mis notas sobre este transportista (solo vos las ves)…"
+                      value={notasOferta[o.id] || ''}
+                      onChange={e => setNotasOferta(n => ({ ...n, [o.id]: e.target.value }))}
+                      onBlur={() => guardarNotaOferta(o.id, notasOferta[o.id])}
+                      className="w-full text-xs border border-gray-100 rounded-[8px] px-2.5 py-1.5 bg-amber-50 text-gray-700 placeholder-gray-400 focus:outline-none focus:border-amber-300 resize-none" />
+                    {guardandoNota[o.id] && <span className="text-[10px] text-gray-400">Guardando…</span>}
+                  </div>
+                  {o.estado === 'enviada' && cupoAbierto && restante > 0 && (
+                    <div className="flex gap-2 items-center">
+                      <Button size="sm" full={false} onClick={() => abrirAceptar(o, maxAceptable)}>
+                        ✓ Elegir
+                      </Button>
+                      <Button size="sm" variant="ghost" full={false}
+                        onClick={async () => {
+                          await supabase.from('ofertas').update({ estado: 'rechazada' }).eq('id', o.id)
+                          await cargar()
+                        }}>
+                        Rechazar
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )
+            })
+          )}
+        </Card>
+
+        {/* Transportistas aceptados: uno por tarjeta, con su etapa y camiones */}
+        {aceptadas.map(o => {
+          const et = ETAPAS_TRANSPORTISTA[o.etapa] || { label: o.etapa, color: 'gray' }
+          const dop = datosOps.find(d => d.transportista_id === o.transportista_id)
+          const cvs = dop ? camionesViaje.filter(c => c.datos_operativos_id === dop.id) : []
+          return (
+            <Card key={o.id} className="mb-3">
+              <div className="flex items-start justify-between mb-2">
+                <div>
+                  <div className="text-xs font-semibold text-verde-600">🚛 Transportista</div>
+                  <div className="text-sm font-semibold text-gray-900">{nombreT(o)}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    {o.camiones_aceptados} camión{o.camiones_aceptados > 1 ? 'es' : ''}
+                    {o.equipos?.length > 0 && ` · ${o.equipos.map(e => VEHICULOS[e] || e).join(', ')}`}
+                  </div>
+                </div>
+                <Badge color={et.color}>{et.label}</Badge>
+              </div>
+              <Contacto telefono={o.transportistas?.usuarios?.telefono} className="mb-2" />
+              <Condiciones oferta={o} />
+
+              {!dop && (
+                <div className="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">
+                  Esperando datos operativos del transportista.
+                </div>
+              )}
+
+              {dop && o.etapa === 'confirmado' && (
+                <div className="text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 mb-2">
+                  ⚠️ {cvs.length < o.camiones_aceptados
+                    ? `Faltan ${o.camiones_aceptados - cvs.length} camión(es): uno salió en otro viaje. Esperando reemplazo del transportista.`
+                    : 'El transportista está revisando sus camiones.'}
+                </div>
+              )}
+
+              {/* Pedidos viejos: condiciones cargadas por el transportista */}
+              {dop && !o.forma_pago && dop.forma_pago && (
+                <Condiciones oferta={dop} />
+              )}
+
+              {cvs.map((cv, i) => {
+                const doc = documentos.find(d => d.camion_viaje_id === cv.id)
+                return (
+                  <div key={cv.id} className="border border-gray-100 rounded-[10px] p-3 mb-2">
+                    {(() => {
+                      const inc = incidencias.find(i => i.camion_viaje_id === cv.id)
+                      return inc ? (
+                        <div className="bg-orange-50 border border-orange-200 rounded-[8px] p-2.5 mb-2">
+                          <div className="text-xs font-bold text-orange-700 mb-1">
+                            ⚠️ Camión {i+1} ({cv.chasis?.dominio}{cv.acoplados ? ` + ${cv.acoplados.dominio}` : ''}) — Incidencia: {inc.tipo}
+                          </div>
+                          {inc.descripcion && <div className="text-xs text-orange-600 mb-1.5">"{inc.descripcion}"</div>}
+                          <div className="text-xs text-gray-700 mb-0.5">
+                            <b>Equipo original:</b> {cv.chasis?.dominio}{cv.acoplados ? ` + ${cv.acoplados.dominio}` : ''}
+                          </div>
+                          {(inc.nuevo_chasis_dom || inc.nuevo_acoplado_dom) && (
+                            <div className="text-xs font-semibold text-gray-900 mb-0.5">
+                              <b>Nuevo equipo para la CPE:</b> {inc.nuevo_chasis_dom || cv.chasis?.dominio}{inc.nuevo_acoplado_dom ? ` + ${inc.nuevo_acoplado_dom}` : (cv.acoplados ? ` + ${cv.acoplados.dominio}` : '')}
+                              {(inc.nuevo_chasis_tara || inc.nuevo_acoplado_tara) ? ` · tara total: ${Number(inc.nuevo_chasis_tara||0)+Number(inc.nuevo_acoplado_tara||0)} kg` : ''}
+                            </div>
+                          )}
+                          {inc.nuevo_chofer_nombre && (
+                            <div className="text-xs text-gray-700 mb-1"><b>Nuevo chofer:</b> {inc.nuevo_chofer_nombre}{inc.nuevo_chofer_dni ? ` · DNI: ${inc.nuevo_chofer_dni}` : ''}</div>
+                          )}
+                          <div className="text-xs text-orange-600 font-semibold mt-1">📄 Emitir nueva CPE con estos datos y subirla acá.</div>
+                        </div>
+                      ) : null
+                    })()}
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-semibold text-gray-900">Camión {i + 1}</span>
+                      {cv.fecha_descarga
+                        ? <Badge color="green">✅ Descargado</Badge>
+                        : ['en_camino','descargado','finalizado'].includes(o.etapa)
+                          ? <Badge color="blue">En camino</Badge>
+                          : doc
+                            ? <Badge color="gray">Documento OK</Badge>
+                            : <Badge color="orange">Falta documento</Badge>}
+                    </div>
+                    <div className="text-xs text-gray-600">
+                      🚛 {cv.chasis?.dominio} <span className="text-gray-400">({TIPOS_CHASIS[cv.chasis?.tipo] || 'Chasis'}{cv.chasis?.tara_kg ? ` · tara ${formatNum(cv.chasis.tara_kg)} kg` : ''})</span>
+                    </div>
+                    {cv.acoplados && (
+                      <div className="text-xs text-gray-600">
+                        🔗 {cv.acoplados.dominio} <span className="text-gray-400">({VEHICULOS[cv.acoplados.tipo] || 'Remolque'}{cv.acoplados.tara_kg ? ` · tara ${formatNum(cv.acoplados.tara_kg)} kg` : ''})</span>
+                      </div>
+                    )}
+                    {(cv.chasis?.tara_kg || cv.acoplados?.tara_kg) && (
+                      <div className="text-xs font-semibold text-gray-800 mt-0.5">
+                        ⚖️ Tara total: {formatNum(Number(cv.chasis?.tara_kg || 0) + Number(cv.acoplados?.tara_kg || 0))} kg
+                      </div>
+                    )}
+                    <div className="text-xs text-gray-600 mt-0.5">👤 {cv.choferes?.nombre} {cv.choferes?.apellido}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">CUIT: {cv.choferes?.cuit}</div>
+                    {cv.kilos_asignados && (
+                      <div className="flex items-center justify-between mt-1.5">
+                        <div className="text-xs text-verde-600">⚖️ {formatNum(cv.kilos_asignados)} kg asignados</div>
+                        {!cv.fecha_descarga && (
+                          <button onClick={() => abrirDoc(cv)} className="text-xs text-azul-600 font-semibold">Editar</button>
+                        )}
+                      </div>
+                    )}
+                    {doc ? (
+                      <div className="mt-1.5 bg-verde-50 border border-verde-200 rounded-lg px-2.5 py-1.5 text-xs text-verde-700 font-medium">
+                        ✅ {docLabel} enviado al transportista — {doc.nombre_original}
+                      </div>
+                    ) : o.etapa === 'datos_enviados' && (
+                      <button onClick={() => abrirDoc(cv)}
+                        className="mt-1.5 w-full text-xs text-azul-600 font-semibold border border-azul-200 rounded-lg px-2 py-1.5 bg-azul-50 text-left">
+                        📄 Asignar kilos / {docLabel}
+                      </button>
+                    )}
+                    {cv.fecha_descarga && <div className="text-xs text-verde-600 mt-1">✅ Descarga: {formatFecha(cv.fecha_descarga)}</div>}
+                  </div>
+                )
+              })}
+
+              {o.etapa === 'descargado' && (
+                <>
+                  <Banner color="purple" title="📦 Descarga informada">
+                    Este transportista informó la descarga de todos sus camiones.
+                  </Banner>
+                  <Button onClick={() => confirmarDescarga(o.id)} disabled={confirmando === o.id}>
+                    {confirmando === o.id ? 'Confirmando…' : '✓ Confirmar descarga'}
+                  </Button>
+                </>
+              )}
+              {o.etapa === 'finalizado' && o.calif_prod && (
+                <div className="text-[11px] text-verde-600 font-medium">✔ {nombreT(o)} calificado</div>
+              )}
+            </Card>
+          )
+        })}
+
+        {/* Paso 7: resumen */}
+        {pedido.estado === 'entrega_informada' && (
+          <Banner color="purple" title="📦 Descarga informada">
+            Confirmá la descarga en la tarjeta de cada transportista.
+          </Banner>
+        )}
+
+        {pedido.estado === 'completado' && (
+          <Banner color="green" title="✅ Pedido finalizado">
+            Descarga confirmada. ¡Gracias por usar Carreta!
+          </Banner>
+        )}
+
+        {/* Repetir pedido (mismos datos, nueva fecha) */}
+        <Button variant="secondary" className="mb-2" onClick={() => navigate('/productor/crear', {
+          state: { repetir: { ...pedido, hacienda } }
+        })}>
+          🔁 Repetir pedido
+        </Button>
+
+        {/* Modo directo: esperando respuesta */}
+        {pedido.estado === 'esperando_respuesta' && (
+          <Card className="mb-3">
+            <div className="text-xs font-semibold text-azul-600 mb-1">🎯 Pedido directo</div>
+            <div className="text-sm font-semibold text-gray-900">
+              {pedido.transportista_directo_info?.usuarios?.razon_social ||
+               `${pedido.transportista_directo_info?.usuarios?.nombre || ''} ${pedido.transportista_directo_info?.usuarios?.apellido || ''}`.trim() ||
+               'Transportista'}
+            </div>
+            <div className="text-xs text-gray-500 mb-2">Esperando que acepte o rechace.</div>
+            <Contacto telefono={pedido.transportista_directo_info?.usuarios?.telefono} className="mb-2" />
+            <Button variant="danger" onClick={async () => {
+              if (!confirm('¿Retirás el pedido? El transportista recibirá un aviso.')) return
+              const { error } = await supabase.rpc('retirar_pedido_directo', { p_pedido_id: id })
+              if (error) alert(error.message); else await cargar()
+            }}>
+              Retirar pedido
+            </Button>
+          </Card>
+        )}
+
+        {/* Modo directo: rechazado */}
+        {pedido.estado === 'rechazado_directo' && (
+          <Card className="mb-3">
+            <Banner color="red" title="❌ Pedido rechazado" className="mb-3">
+              {pedido.transportista_directo_info?.usuarios?.razon_social ||
+               `${pedido.transportista_directo_info?.usuarios?.nombre || ''} ${pedido.transportista_directo_info?.usuarios?.apellido || ''}`.trim()}
+              {pedido.motivo_rechazo ? ` rechazó el pedido. Motivo: ${pedido.motivo_rechazo}` : ' rechazó el pedido.'}
+            </Banner>
+            <div className="flex gap-2">
+              <Button variant="secondary" full={false} onClick={() => navigate('/productor/crear', {
+                state: { repetir: { ...pedido, hacienda, _modoDirecto: true } }
+              })}>
+                🎯 Otro directo
+              </Button>
+              <Button variant="secondary" full={false} onClick={async () => {
+                if (!confirm('¿Publicás este pedido a todos los transportistas de tu zona?')) return
+                const { error } = await supabase.rpc('publicar_a_zona', { p_pedido_id: id })
+                if (error) alert(error.message); else await cargar()
+              }}>
+                📢 Publicar a la zona
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {pedido.estado === 'cancelado' && (
+          <Banner color="red" title="Pedido cancelado">
+            Este pedido fue cancelado.
+          </Banner>
+        )}
+
+        {/* Cancelar (solo lo que todavía no salió) */}
+        {puedeCancelar && (
+          <Button variant="danger" onClick={() => setModalCancelar(true)} className="mt-2">
+            {aceptadas.some(o => ['en_camino','descargado','finalizado'].includes(o.etapa))
+              ? 'Cancelar camiones que no salieron'
+              : 'Cancelar pedido'}
+          </Button>
+        )}
+      </Body>
+
+      {/* Modal cancelar */}
+      <ModalCancelar
+        open={modalCancelar}
+        onClose={() => setModalCancelar(false)}
+        pedidoId={id}
+        rol="productor"
+        onCancelado={async () => { setModalCancelar(false); await cargar() }}
+      />
+
+      {/* Modal elegir transportista con condiciones acordadas */}
+      <Modal open={!!aceptando} onClose={() => setAceptando(null)} title="Elegir transportista">
+        {aceptando && (
+          <>
+            <div className="text-sm font-semibold text-gray-900 mb-0.5">{nombreT(aceptando.oferta)}</div>
+            <div className="text-xs text-gray-500 mb-3">
+              Cargá lo que acordaron por teléfono. Queda fijo y le llega al transportista.
+            </div>
+            {aceptando.max > 1 && (
+              <Field label={`Camiones que tomás (máx. ${aceptando.max})`}>
+                <Input type="number" min="1" max={aceptando.max} value={formAcuerdo.cantidad}
+                  onChange={e => setFormAcuerdo(f => ({ ...f, cantidad: e.target.value }))} />
+              </Field>
+            )}
+            <Field label="Precio acordado">
+              <Input placeholder={pedido?.tipo_actividad === 'ganadero' ? 'Ej: $1.200/km' : 'Ej: $15.000/tn'}
+                value={formAcuerdo.precio} onChange={e => setFormAcuerdo(f => ({ ...f, precio: e.target.value }))} />
+            </Field>
+            <Field label="Forma de pago">
+              <Select value={formAcuerdo.forma_pago} onChange={e => setFormAcuerdo(f => ({ ...f, forma_pago: e.target.value }))}>
+                <option value="">Seleccioná</option>
+                {FORMAS_PAGO.map(fp => <option key={fp}>{fp}</option>)}
+              </Select>
+            </Field>
+            <Field label="Monto total (opcional)">
+              <Input type="number" placeholder="Ej: 450000" value={formAcuerdo.monto}
+                onChange={e => setFormAcuerdo(f => ({ ...f, monto: e.target.value }))} />
+            </Field>
+            <Field label="Otras condiciones (opcional)">
+              <Textarea rows={2} placeholder="Ej: 50% al cargar, resto a 30 días"
+                value={formAcuerdo.condiciones} onChange={e => setFormAcuerdo(f => ({ ...f, condiciones: e.target.value }))} />
+            </Field>
+            {errAcuerdo && <Banner color="red" className="mb-3">{errAcuerdo}</Banner>}
+            <Button onClick={confirmarOferta} disabled={savingAcuerdo}>
+              {savingAcuerdo ? 'Enviando…' : '✓ Confirmar y enviar al transportista'}
+            </Button>
+            <Button variant="ghost" onClick={() => setAceptando(null)} className="mt-2">Cancelar</Button>
+          </>
+        )}
+      </Modal>
+
+
+      {/* Notas privadas */}
+      {(pedido.estado === 'completado' || pedido.estado === 'cancelado') && usuario && (
+        <NotasPedido pedidoId={id} rol="productor" usuarioId={usuario?.id} />
+      )}
+
+      {/* Modal calificar transportista */}
+      <ModalCalificar
+        open={!!modalCalif}
+        onClose={() => setModalCalif(null)}
+        ofertaId={modalCalif?.ofertaId}
+        rol="productor"
+        pedidoNumero={modalCalif?.numero}
+        obligatorio
+        onCalificado={() => { setModalCalif(null); cargar() }}
+      />
+
+      {/* Modal kilos / doc */}
+      <Modal open={modalDoc} onClose={() => setModalDoc(false)}
+        title={`${documentoDe(pedido).label} — Kilos asignados`}>
+        <Banner color="orange" className="mb-3">
+          Ingresá los kilos de este camión {documentoDe(pedido).ayuda}.
+        </Banner>
+        <div className="text-xs text-gray-500 mb-3">
+          🚛 {camionSeleccionado?.chasis?.dominio} / {camionSeleccionado?.acoplados?.dominio}<br/>
+          👤 {camionSeleccionado?.choferes?.nombre} {camionSeleccionado?.choferes?.apellido}
+        </div>
+        <Field label="Kilos asignados a este camión">
+          <Input type="number" placeholder="Ej: 28000"
+            value={kilosInput} onChange={e => setKilosInput(e.target.value)} />
+        </Field>
+        <Field label={`Adjuntar ${documentoDe(pedido).label} (PDF)`}>
+          <input type="file" accept=".pdf"
+            onChange={e => setArchivoDoc(e.target.files?.[0] || null)}
+            className="w-full text-xs text-gray-600 border border-gray-200 rounded-[10px] px-3 py-2 bg-gray-50 file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-xs file:bg-verde-50 file:text-verde-700 cursor-pointer" />
+          {archivoDoc && <p className="text-[10px] text-verde-600 mt-1">📎 {archivoDoc.name}</p>}
+        </Field>
+        <Button onClick={guardarKilos} disabled={savingDoc || !kilosInput}>
+          {savingDoc ? 'Guardando…' : 'Confirmar'}
+        </Button>
+        <Button variant="ghost" onClick={() => setModalDoc(false)} className="mt-2">Cancelar</Button>
+      </Modal>
+      <BottomTabs rol="productor" />
+    </Shell>
+  )
+}

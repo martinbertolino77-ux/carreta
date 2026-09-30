@@ -63,7 +63,7 @@ export default function AdminPedidos() {
 
   const nombreProd = (p) => p.productores?.usuarios?.razon_social || `${p.productores?.usuarios?.nombre || ''} ${p.productores?.usuarios?.apellido || ''}`.trim()
   const tipoCarga = (p) => p.tipo_actividad === 'agricola' ? p.tipo_cereal : p.tipo_actividad === 'ganadero' ? 'Ganadero' : p.producto_granel || 'Otras'
-
+  console.log(pedidos.map(p => p.establecimientos?.provincia))
   const filtrados = pedidos.filter(p => {
     if (filtro !== 'todos' && p.estado !== filtro) return false
     if (provincia !== 'todas' && p.establecimientos?.provincia?.trim() !== provincia.trim()) return false

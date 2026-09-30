@@ -6,25 +6,31 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      strategies: 'injectManifest',
-      srcDir: 'public',
-      filename: 'sw.js',
+      strategies: 'generateSW',
       registerType: 'autoUpdate',
       injectRegister: false,
       manifest: false,
 
-      devOptions: {
-        enabled: true,
-        type: 'module',
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globIgnores: ['**/sw.js', '**/sw.js.map'],
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/api\//],
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'supabase-cache',
+              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 },
+              networkTimeoutSeconds: 10,
+            },
+          },
+        ],
       },
 
-      injectManifest: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        globIgnores: [
-          '**/node_modules/**',
-          '**/sw.js',
-          '**/sw.js.map',
-        ],
+      devOptions: {
+        enabled: true,
       },
     }),
   ],

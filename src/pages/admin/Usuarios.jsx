@@ -3,9 +3,13 @@ import { supabase } from '../../lib/supabase'
 import AdminShell from './Shell'
 import * as XLSX from 'xlsx'
 
+const ROLES = ['todos', 'productor', 'transportista']
+
 export default function AdminUsuarios() {
   const [usuarios, setUsuarios] = useState([])
   const [busqueda, setBusqueda] = useState('')
+  const [filtroRol, setFiltroRol] = useState('todos')
+  const [expandido, setExpandido] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { cargar() }, [])
@@ -25,11 +29,15 @@ export default function AdminUsuarios() {
     cargar()
   }
 
+  const toggleExpandido = (id) => setExpandido(expandido === id ? null : id)
+
   const filtrados = usuarios.filter(u => {
     const q = busqueda.toLowerCase()
-    return !q || u.nombre?.toLowerCase().includes(q) || u.apellido?.toLowerCase().includes(q)
+    const matchRol = filtroRol === 'todos' || (u.roles || []).includes(filtroRol)
+    const matchBusqueda = !q || u.nombre?.toLowerCase().includes(q) || u.apellido?.toLowerCase().includes(q)
       || u.razon_social?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
       || u.cuit?.includes(q)
+    return matchRol && matchBusqueda
   })
 
   const exportar = () => {
@@ -44,7 +52,7 @@ export default function AdminUsuarios() {
       'Roles': (u.roles || []).join(', '),
       'Admin': u.is_admin ? 'Sí' : 'No',
       'Activo': u.activo ? 'Sí' : 'No',
-      'Registro': u.created_at?.slice(0,10),
+      'Registro': u.created_at?.slice(0, 10),
     }))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Usuarios')
@@ -57,29 +65,82 @@ export default function AdminUsuarios() {
         <h2 className="text-lg font-bold text-gray-900">Usuarios ({filtrados.length})</h2>
         <button onClick={exportar} className="text-xs bg-gray-900 text-white rounded-lg px-3 py-1.5 hover:bg-gray-700">⬇ Excel</button>
       </div>
+
+      {/* Filtro por rol */}
+      <div className="flex gap-1 mb-3">
+        {ROLES.map(r => (
+          <button key={r} onClick={() => setFiltroRol(r)}
+            className={`text-xs px-3 py-1 rounded-full border transition-colors ${filtroRol === r ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200'}`}>
+            {r === 'todos' ? 'Todos' : r === 'productor' ? '🌱 Productor' : '🚛 Transportista'}
+          </button>
+        ))}
+      </div>
+
       <input placeholder="Buscar por nombre, email o CUIT…" value={busqueda}
         onChange={e => setBusqueda(e.target.value)}
         className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm mb-4 focus:outline-none focus:border-gray-400" />
+
       {loading ? <p className="text-sm text-gray-400">Cargando…</p> : (
         <div className="space-y-2">
           {filtrados.map(u => (
-            <div key={u.id} className={`bg-white rounded-xl border p-4 ${!u.activo ? 'opacity-50' : ''}`}>
-              <div className="flex items-start justify-between gap-3">
+            <div key={u.id} className={`bg-white rounded-xl border transition-opacity ${!u.activo ? 'opacity-50' : ''}`}>
+              {/* Fila principal */}
+              <div className="flex items-start justify-between gap-3 p-4"
+                onClick={() => toggleExpandido(u.id)}
+                style={{ cursor: 'pointer' }}>
                 <div className="flex-1">
-                  <div className="font-semibold text-sm text-gray-900">{u.razon_social || `${u.nombre} ${u.apellido}`}</div>
-                  <div className="text-xs text-gray-500">{u.email} · CUIT: {u.cuit}</div>
-                  <div className="text-xs text-gray-400">{u.localidad}, {u.provincia} · {(u.roles||[]).join(' + ')}{u.is_admin ? ' · ⚡ Admin' : ''}</div>
-                  <div className="text-[10px] text-gray-300 mt-0.5">Registro: {u.created_at?.slice(0,10)}</div>
+                  <div className="font-semibold text-sm text-gray-900">
+                    {u.razon_social || `${u.nombre} ${u.apellido}`}
+                    {u.is_admin && <span className="ml-2 text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded-full">⚡ Admin</span>}
+                  </div>
+                  <div className="text-xs text-gray-500">{u.email}</div>
+                  <div className="flex gap-1 mt-1">
+                    {(u.roles || []).map(r => (
+                      <span key={r} className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                        {r === 'productor' ? '🌱' : '🚛'} {r}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex flex-col gap-1.5 flex-shrink-0">
-                  <button onClick={() => toggleActivo(u)}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className="text-gray-300 text-xs">{expandido === u.id ? '▲' : '▼'}</span>
+                  <button onClick={e => { e.stopPropagation(); toggleActivo(u) }}
                     className={`text-xs px-3 py-1 rounded-lg font-medium ${u.activo ? 'bg-red-50 text-red-700 hover:bg-red-100' : 'bg-green-50 text-green-700 hover:bg-green-100'}`}>
                     {u.activo ? 'Desactivar' : 'Activar'}
                   </button>
                 </div>
               </div>
+
+              {/* Detalle expandible */}
+              {expandido === u.id && (
+                <div className="border-t border-gray-100 px-4 py-3 bg-gray-50 rounded-b-xl grid grid-cols-2 gap-x-4 gap-y-1.5">
+                  <div>
+                    <div className="text-[10px] text-gray-400">CUIT</div>
+                    <div className="text-xs text-gray-700">{u.cuit || '—'}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-gray-400">Teléfono</div>
+                    <div className="text-xs text-gray-700">{u.telefono || '—'}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-gray-400">Localidad</div>
+                    <div className="text-xs text-gray-700">{u.localidad || '—'}, {u.provincia || '—'}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-gray-400">Registro</div>
+                    <div className="text-xs text-gray-700">{u.created_at?.slice(0, 10)}</div>
+                  </div>
+                  <div className="col-span-2">
+                    <div className="text-[10px] text-gray-400">Estado</div>
+                    <div className="text-xs text-gray-700">{u.activo ? '✅ Activo' : '❌ Inactivo'}</div>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
+          {filtrados.length === 0 && (
+            <p className="text-sm text-gray-400 text-center py-8">Sin resultados</p>
+          )}
         </div>
       )}
     </AdminShell>

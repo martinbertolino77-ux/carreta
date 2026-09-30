@@ -25,10 +25,18 @@ export default function AdminLogin() {
           <h1 className="text-xl font-bold text-gray-900">Panel Admin</h1>
           <p className="text-xs text-gray-500 mt-1">Carreta — Acceso restringido</p>
         </div>
-        <input type="email" placeholder="Email" value={form.email}
+        <input
+          type="email"
+          placeholder="Email"
+          value={form.email}
+          autoComplete="username"
           onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
           className="w-full border border-gray-200 rounded-[10px] px-3 py-2.5 text-sm mb-3 bg-gray-50 focus:outline-none focus:border-gray-500" />
-        <input type="password" placeholder="Contraseña" value={form.password}
+        <input
+          type="password"
+          placeholder="Contraseña"
+          value={form.password}
+          autoComplete="current-password"
           onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
           onKeyDown={e => e.key === 'Enter' && ingresar()}
           className="w-full border border-gray-200 rounded-[10px] px-3 py-2.5 text-sm mb-4 bg-gray-50 focus:outline-none focus:border-gray-500" />

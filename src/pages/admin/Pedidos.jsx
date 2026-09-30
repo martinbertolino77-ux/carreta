@@ -32,7 +32,7 @@ export default function AdminPedidos() {
     const { data } = await supabase.from('pedidos')
       .select(`id, numero, estado, tipo_actividad, tipo_cereal, producto_granel, modo_publicacion,
         destino_localidad, destino_provincia, camiones_necesarios, created_at, updated_at,
-        establecimientos:establecimiento_id(localidad, provincia),
+        establecimiento_id(localidad, provincia),
         productores(usuarios(nombre, apellido, razon_social, email))`)
       .order('created_at', { ascending: false })
       .limit(500)
@@ -63,10 +63,10 @@ export default function AdminPedidos() {
 
   const nombreProd = (p) => p.productores?.usuarios?.razon_social || `${p.productores?.usuarios?.nombre || ''} ${p.productores?.usuarios?.apellido || ''}`.trim()
   const tipoCarga = (p) => p.tipo_actividad === 'agricola' ? p.tipo_cereal : p.tipo_actividad === 'ganadero' ? 'Ganadero' : p.producto_granel || 'Otras'
-  console.log(pedidos.map(p => p.establecimientos?.provincia))
+
   const filtrados = pedidos.filter(p => {
     if (filtro !== 'todos' && p.estado !== filtro) return false
-    if (provincia !== 'todas' && p.establecimientos?.provincia?.trim() !== provincia.trim()) return false
+    if (provincia !== 'todas' && p.establecimiento_id?.provincia?.trim() !== provincia.trim()) return false
     if (desde && p.created_at < desde) return false
     if (hasta && p.created_at > hasta + 'T23:59:59') return false
     const q = busqueda.toLowerCase()
@@ -77,7 +77,7 @@ export default function AdminPedidos() {
     const filas = filtrados.map(p => ({
       'Nro': formatNroPedido(p.numero), 'Estado': p.estado,
       'Tipo': tipoCarga(p),
-      'Origen': `${p.establecimientos?.localidad}, ${p.establecimientos?.provincia}`,
+      'Origen': `${p.establecimiento_id?.localidad}, ${p.establecimiento_id?.provincia}`,
       'Destino': `${p.destino_localidad}, ${p.destino_provincia}`,
       'Camiones': p.camiones_necesarios,
       'Productor': nombreProd(p),
@@ -146,7 +146,6 @@ export default function AdminPedidos() {
         <div className="space-y-2">
           {filtrados.map(p => (
             <div key={p.id} className="bg-white rounded-xl border">
-              {/* Fila principal */}
               <div className="flex items-start justify-between gap-3 p-4 cursor-pointer"
                 onClick={() => toggleExpandido(p)}>
                 <div className="flex-1">
@@ -157,7 +156,7 @@ export default function AdminPedidos() {
                     </span>
                   </div>
                   <div className="text-xs text-gray-700">{tipoCarga(p)} · {p.camiones_necesarios} camión{p.camiones_necesarios > 1 ? 'es' : ''}</div>
-                  <div className="text-xs text-gray-500">{p.establecimientos?.localidad} → {p.destino_localidad}</div>
+                  <div className="text-xs text-gray-500">{p.establecimiento_id?.localidad} → {p.destino_localidad}</div>
                   <div className="text-xs text-gray-400">👤 {nombreProd(p)} · {p.created_at?.slice(0, 10)}</div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
@@ -171,13 +170,12 @@ export default function AdminPedidos() {
                 </div>
               </div>
 
-              {/* Detalle expandible */}
               {expandido === p.id && (
                 <div className="border-t border-gray-100 px-4 py-3 bg-gray-50 rounded-b-xl">
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mb-3">
                     <div>
                       <div className="text-[10px] text-gray-400">Provincia origen</div>
-                      <div className="text-xs text-gray-700">{p.establecimientos?.provincia || '—'}</div>
+                      <div className="text-xs text-gray-700">{p.establecimiento_id?.provincia || '—'}</div>
                     </div>
                     <div>
                       <div className="text-[10px] text-gray-400">Provincia destino</div>
@@ -193,7 +191,6 @@ export default function AdminPedidos() {
                     </div>
                   </div>
 
-                  {/* Ofertas */}
                   <div className="text-xs font-semibold text-gray-700 mb-2">
                     Ofertas {ofertas[p.id] ? `(${ofertas[p.id].length})` : '…'}
                   </div>
@@ -233,7 +230,6 @@ export default function AdminPedidos() {
         </div>
       )}
 
-      {/* Modal cancelar */}
       {cancelando && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm">

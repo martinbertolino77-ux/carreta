@@ -92,6 +92,7 @@ export default function DetalleDisponible() {
 
       // Notificar al productor
       if (pedido?.productores?.usuario_id) {
+        console.log('[Push] transportista data:', JSON.stringify(t))
         const nombreTransp = t.usuarios?.razon_social || `${t.usuarios?.nombre || ''} ${t.usuarios?.apellido || ''}`.trim() || 'Un transportista'
         supabase.functions.invoke('send-push', {
           body: {

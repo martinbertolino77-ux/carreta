@@ -14,15 +14,20 @@ export function usePushNotifications(usuarioId) {
   useEffect(() => {
     if (!usuarioId) return
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
-    if (!VAPID_PUBLIC_KEY) return
-
+    if (!VAPID_PUBLIC_KEY) {
+      console.warn('[Push] VAPID_PUBLIC_KEY no definida')
+      return
+    }
+    console.log('[Push] Iniciando suscripcion para usuario:', usuarioId)
     suscribir(usuarioId)
   }, [usuarioId])
 }
 
 async function suscribir(usuarioId) {
+  console.log('[Push] VAPID KEY:', VAPID_PUBLIC_KEY?.slice(0, 10) + '...')
   try {
     const permission = await Notification.requestPermission()
+    console.log('[Push] Permiso:', permission)
     if (permission !== 'granted') return
 
     const reg = await navigator.serviceWorker.ready
@@ -32,16 +37,19 @@ async function suscribir(usuarioId) {
       applicationServerKey: await urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
     })
 
-    const { endpoint, keys } = sub.toJSON()
+    const json = sub.toJSON()
+    console.log('[Push] Suscripcion OK:', json.endpoint?.slice(0, 30) + '...')
 
     await supabase.from('push_subscriptions').upsert({
       usuario_id: usuarioId,
-      endpoint,
-      p256dh: keys.p256dh,
-      auth: keys.auth,
+      endpoint: json.endpoint,
+      p256dh: json.keys.p256dh,
+      auth: json.keys.auth,
     }, { onConflict: 'usuario_id,endpoint' })
 
+    console.log('[Push] Guardado en Supabase OK')
+
   } catch (err) {
-    console.warn('[Push] Error suscribiendo:', err)
+    console.error('[Push] Error:', err)
   }
 }

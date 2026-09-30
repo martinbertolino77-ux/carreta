@@ -66,7 +66,7 @@ export default function AdminPedidos() {
 
   const filtrados = pedidos.filter(p => {
     if (filtro !== 'todos' && p.estado !== filtro) return false
-    if (provincia !== 'todas' && p.establecimientos?.provincia !== provincia) return false
+    if (provincia !== 'todas' && p.establecimientos?.provincia?.trim() !== provincia.trim()) return false
     if (desde && p.created_at < desde) return false
     if (hasta && p.created_at > hasta + 'T23:59:59') return false
     const q = busqueda.toLowerCase()

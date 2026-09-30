@@ -43,7 +43,7 @@ export default function DetalleDisponible() {
     setLoading(true)
     const { data: p } = await supabase
       .from('pedidos')
-      .select(`*, establecimientos(nombre, localidad, provincia, departamento, link_maps, lat, lng), productores(id, usuarios(nombre, apellido, razon_social))`)
+      .select(`*, establecimientos(nombre, localidad, provincia, departamento, link_maps, lat, lng), productores(id, usuario_id, usuarios(nombre, apellido, razon_social))`)
       .eq('id', id)
       .single()
     setPedido(p)
@@ -53,7 +53,6 @@ export default function DetalleDisponible() {
       setHacienda(h || [])
     }
 
-    // Ver si ya ofertaste
     const t = await getMiTransportista()
     if (t) {
       const { data: o } = await supabase.from('ofertas')
@@ -81,7 +80,6 @@ export default function DetalleDisponible() {
     setSaving(true); setError('')
     try {
       const t = await getMiTransportista()
-      // Postulación: sin precio. El precio se acuerda por teléfono y lo carga el productor al elegir.
       const { error: insErr } = await supabase.from('ofertas').insert({
         pedido_id: id,
         transportista_id: t.id,
@@ -91,6 +89,20 @@ export default function DetalleDisponible() {
       })
       if (insErr) throw insErr
       await supabase.from('pedidos').update({ estado: 'con_ofertas' }).eq('id', id)
+
+      // Notificar al productor
+      if (pedido?.productores?.usuario_id) {
+        const nombreTransp = t.usuarios?.razon_social || `${t.usuarios?.nombre || ''} ${t.usuarios?.apellido || ''}`.trim() || 'Un transportista'
+        supabase.functions.invoke('send-push', {
+          body: {
+            usuario_id: pedido.productores.usuario_id,
+            titulo: '🚛 Nueva oferta recibida',
+            cuerpo: `${nombreTransp} se postuló para el pedido ${formatNroPedido(pedido.numero)}`,
+            url: `/productor/pedido/${id}`,
+          }
+        }).catch(err => console.warn('[Push] Error enviando notificacion:', err))
+      }
+
       setModalOfertar(false)
       await cargar()
     } catch (e) { setError(e.message) }
@@ -113,24 +125,20 @@ export default function DetalleDisponible() {
     </Shell>
   )
 
-  const esAgricola = pedido.tipo_actividad !== 'ganadero' // agrícola y otras cargas: precio por tonelada
+  const esAgricola = pedido.tipo_actividad !== 'ganadero'
   const totalHacienda = hacienda.reduce((a, h) => a + h.cantidad * h.kg_por_cabeza, 0)
 
   return (
     <Shell>
       <Topbar title={`Pedido ${formatNroPedido(pedido.numero)}`} showBack backTo="/transportista/disponibles" accent="azul" />
       <Body>
-
-        {/* Encabezado */}
         <Card className="mb-3">
           <div className="flex items-start gap-3">
             <div className={`w-12 h-12 rounded-[10px] flex items-center justify-center text-2xl flex-shrink-0 ${bgPedido(pedido)}`}>
               {iconoPedido(pedido)}
             </div>
             <div className="flex-1">
-              <div className="text-base font-bold text-gray-900 mb-1">
-                {tituloPedido(pedido)}
-              </div>
+              <div className="text-base font-bold text-gray-900 mb-1">{tituloPedido(pedido)}</div>
               <Route
                 origen={`${pedido.establecimientos?.localidad}, ${pedido.establecimientos?.provincia}`}
                 destino={`${pedido.destino_localidad}, ${pedido.destino_provincia}`}
@@ -150,8 +158,6 @@ export default function DetalleDisponible() {
           </div>
         </Card>
 
-        {/* Detalle agrícola */}
-
         {esAgricola && pedido.kilos_estimados && (
           <Card className="mb-3">
             <div className="text-xs font-semibold text-azul-600 mb-2">Detalle de carga</div>
@@ -162,7 +168,6 @@ export default function DetalleDisponible() {
           </Card>
         )}
 
-        {/* Detalle hacienda */}
         {!esAgricola && hacienda.length > 0 && (
           <Card className="mb-3">
             <div className="text-xs font-semibold text-azul-600 mb-2">Detalle de hacienda</div>
@@ -192,7 +197,6 @@ export default function DetalleDisponible() {
           </Card>
         )}
 
-        {/* Establecimiento */}
         <Card className="mb-3">
           <div className="text-xs font-semibold text-azul-600 mb-2">Origen</div>
           <div className="text-sm font-semibold text-gray-900">{pedido.establecimientos?.nombre}</div>
@@ -202,7 +206,6 @@ export default function DetalleDisponible() {
           )}
         </Card>
 
-        {/* Destino */}
         <Card className="mb-3">
           <div className="text-xs font-semibold text-azul-600 mb-2">Destino</div>
           <div className="text-sm font-semibold text-gray-900">{pedido.destino_localidad}, {pedido.destino_provincia}</div>
@@ -224,7 +227,6 @@ export default function DetalleDisponible() {
           />
         )}
 
-        {/* Observaciones */}
         {pedido.observaciones && (
           <Card className="mb-3">
             <div className="text-xs font-semibold text-azul-600 mb-1">Observaciones del productor</div>
@@ -232,7 +234,6 @@ export default function DetalleDisponible() {
           </Card>
         )}
 
-        {/* Mi oferta */}
         {miOferta ? (
           (() => {
             const info = {
@@ -268,13 +269,11 @@ export default function DetalleDisponible() {
           </Button>
         )}
 
-        {/* WhatsApp */}
         <Button variant="whatsapp" onClick={() => window.open(`https://wa.me/?text=Hola, vi el pedido ${formatNroPedido(pedido.numero)} en Carreta`)}>
           💬 Consultar por WhatsApp
         </Button>
       </Body>
 
-      {/* Modal ofertar */}
       <Modal open={modalOfertar} onClose={() => setModalOfertar(false)} title="Postularme">
         <Field label="Camiones que ofrecés">
           <Input type="number" min="1" max={pedido.camiones_necesarios}

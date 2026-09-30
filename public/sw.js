@@ -1,16 +1,19 @@
-const STATIC_CACHE = 'carreta-static-v1';
-const DYNAMIC_CACHE = 'carreta-dynamic-v1';
+const STATIC_CACHE = 'carreta-static-v3';
+const DYNAMIC_CACHE = 'carreta-dynamic-v3';
 
-// ← REQUERIDO por vite-plugin-pwa injectManifest
 const WB_MANIFEST = self.__WB_MANIFEST || [];
 
 // ─── INSTALL ───────────────────────────────────────────────
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(STATIC_CACHE).then((cache) => {
-      // Cachear los assets que Vite inyecta automáticamente
-      const urls = WB_MANIFEST.map((entry) => entry.url);
-      return cache.addAll([...urls, '/', '/index.html', '/manifest.json']);
+      const urls = [...new Set([
+        '/',
+        '/index.html',
+        '/manifest.json',
+        ...WB_MANIFEST.map((entry) => entry.url)
+      ])]
+      return cache.addAll(urls)
     })
   );
   self.skipWaiting();
@@ -38,19 +41,16 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
   if (url.origin !== location.origin && !url.hostname.includes('supabase')) return;
 
-  // API / Supabase: Network first
   if (url.pathname.startsWith('/api/') || url.hostname.includes('supabase')) {
     event.respondWith(networkFirst(request));
     return;
   }
 
-  // Assets estáticos: Cache first
   if (['script', 'style', 'image', 'font'].includes(request.destination)) {
     event.respondWith(cacheFirst(request));
     return;
   }
 
-  // Navegación SPA: Network first, fallback index.html
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request).catch(() => caches.match('/index.html'))
@@ -101,6 +101,36 @@ async function staleWhileRevalidate(request) {
   return cached || fetchPromise;
 }
 
+// ─── PUSH NOTIFICATIONS ────────────────────────────────────
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+  const data = event.data.json();
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'Carreta', {
+      body: data.body || 'Nueva actividad en Carreta',
+      icon: '/icons/manifest-icon-192.maskable.png',
+      badge: '/icons/manifest-icon-192.maskable.png',
+      data: { url: data.url || '/' },
+      vibrate: [200, 100, 200],
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          client.navigate(event.notification.data?.url || '/')
+          return client.focus()
+        }
+      }
+      return clients.openWindow(event.notification.data?.url || '/')
+    })
+  );
+});
+
 // ─── BACKGROUND SYNC ───────────────────────────────────────
 self.addEventListener('sync', (event) => {
   if (event.tag === 'sync-cargas') {
@@ -124,26 +154,6 @@ async function syncCargas() {
     }
   }
 }
-
-// ─── PUSH NOTIFICATIONS ────────────────────────────────────
-self.addEventListener('push', (event) => {
-  if (!event.data) return;
-  const data = event.data.json();
-  event.waitUntil(
-    self.registration.showNotification(data.title || 'Carreta', {
-      body: data.body || 'Nueva actividad en Carreta',
-      icon: '/icons/icon-192x192.png',
-      badge: '/icons/icon-72x72.png',
-      data: { url: data.url || '/' },
-      vibrate: [200, 100, 200],
-    })
-  );
-});
-
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-  event.waitUntil(clients.openWindow(event.notification.data?.url || '/'));
-});
 
 // ─── INDEXEDDB HELPERS ─────────────────────────────────────
 function openDB() {

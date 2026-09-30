@@ -29,6 +29,13 @@ export default function AdminUsuarios() {
     cargar()
   }
 
+  const toggleAdmin = async (u) => {
+    const accion = u.is_admin ? 'quitar permisos admin a' : 'hacer admin a'
+    if (!confirm(`¿Querés ${accion} ${u.razon_social || u.nombre}?`)) return
+    await supabase.from('usuarios').update({ is_admin: !u.is_admin }).eq('id', u.id)
+    cargar()
+  }
+
   const toggleExpandido = (id) => setExpandido(expandido === id ? null : id)
 
   const filtrados = usuarios.filter(u => {
@@ -66,7 +73,6 @@ export default function AdminUsuarios() {
         <button onClick={exportar} className="text-xs bg-gray-900 text-white rounded-lg px-3 py-1.5 hover:bg-gray-700">⬇ Excel</button>
       </div>
 
-      {/* Filtro por rol */}
       <div className="flex gap-1 mb-3">
         {ROLES.map(r => (
           <button key={r} onClick={() => setFiltroRol(r)}
@@ -84,10 +90,8 @@ export default function AdminUsuarios() {
         <div className="space-y-2">
           {filtrados.map(u => (
             <div key={u.id} className={`bg-white rounded-xl border transition-opacity ${!u.activo ? 'opacity-50' : ''}`}>
-              {/* Fila principal */}
-              <div className="flex items-start justify-between gap-3 p-4"
-                onClick={() => toggleExpandido(u.id)}
-                style={{ cursor: 'pointer' }}>
+              <div className="flex items-start justify-between gap-3 p-4 cursor-pointer"
+                onClick={() => toggleExpandido(u.id)}>
                 <div className="flex-1">
                   <div className="font-semibold text-sm text-gray-900">
                     {u.razon_social || `${u.nombre} ${u.apellido}`}
@@ -111,29 +115,38 @@ export default function AdminUsuarios() {
                 </div>
               </div>
 
-              {/* Detalle expandible */}
               {expandido === u.id && (
-                <div className="border-t border-gray-100 px-4 py-3 bg-gray-50 rounded-b-xl grid grid-cols-2 gap-x-4 gap-y-1.5">
-                  <div>
-                    <div className="text-[10px] text-gray-400">CUIT</div>
-                    <div className="text-xs text-gray-700">{u.cuit || '—'}</div>
+                <div className="border-t border-gray-100 px-4 py-3 bg-gray-50 rounded-b-xl">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mb-3">
+                    <div>
+                      <div className="text-[10px] text-gray-400">CUIT</div>
+                      <div className="text-xs text-gray-700">{u.cuit || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-gray-400">Teléfono</div>
+                      <div className="text-xs text-gray-700">{u.telefono || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-gray-400">Localidad</div>
+                      <div className="text-xs text-gray-700">{u.localidad || '—'}, {u.provincia || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-gray-400">Registro</div>
+                      <div className="text-xs text-gray-700">{u.created_at?.slice(0, 10)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-gray-400">Estado</div>
+                      <div className="text-xs text-gray-700">{u.activo ? '✅ Activo' : '❌ Inactivo'}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-gray-400">Permisos</div>
+                      <div className="text-xs text-gray-700">{u.is_admin ? '⚡ Admin' : 'Usuario normal'}</div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="text-[10px] text-gray-400">Teléfono</div>
-                    <div className="text-xs text-gray-700">{u.telefono || '—'}</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-gray-400">Localidad</div>
-                    <div className="text-xs text-gray-700">{u.localidad || '—'}, {u.provincia || '—'}</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-gray-400">Registro</div>
-                    <div className="text-xs text-gray-700">{u.created_at?.slice(0, 10)}</div>
-                  </div>
-                  <div className="col-span-2">
-                    <div className="text-[10px] text-gray-400">Estado</div>
-                    <div className="text-xs text-gray-700">{u.activo ? '✅ Activo' : '❌ Inactivo'}</div>
-                  </div>
+                  <button onClick={() => toggleAdmin(u)}
+                    className={`w-full text-xs py-2 rounded-xl font-medium ${u.is_admin ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100' : 'bg-gray-900 text-white hover:bg-gray-700'}`}>
+                    {u.is_admin ? '⚡ Quitar admin' : '⚡ Hacer admin'}
+                  </button>
                 </div>
               )}
             </div>

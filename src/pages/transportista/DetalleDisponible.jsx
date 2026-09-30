@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import MapRuta from '../../components/ui/MapRuta'
-import { supabase, getMiTransportista } from '../../lib/supabase'
+import { supabase, getMiTransportista, getMiTransportistaConNombre } from '../../lib/supabase'
 import Shell, { Body } from '../../components/layout/Shell'
 import Topbar from '../../components/layout/Topbar'
 import BottomTabs from '../../components/layout/BottomTabs'
@@ -79,7 +79,7 @@ export default function DetalleDisponible() {
 
     setSaving(true); setError('')
     try {
-      const t = await getMiTransportista('id, usuarios(razon_social, nombre, apellido)')
+      const t = await getMiTransportistaConNombre()
       const { error: insErr } = await supabase.from('ofertas').insert({
         pedido_id: id,
         transportista_id: t.id,

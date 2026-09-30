@@ -13,8 +13,6 @@ export const supabase = createClient(url, key, {
   },
 })
 
-// Transportista del usuario logueado (filtrado por usuario: un productor
-// también puede ver otros transportistas, por eso no alcanza con .single()).
 export async function getMiTransportista(campos = 'id') {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session?.user) return null
@@ -24,4 +22,21 @@ export async function getMiTransportista(campos = 'id') {
     .eq('usuario_id', session.user.id)
     .maybeSingle()
   return data || null
+}
+
+export async function getMiTransportistaConNombre() {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.user) return null
+  const { data: t } = await supabase
+    .from('transportistas')
+    .select('id, usuario_id')
+    .eq('usuario_id', session.user.id)
+    .maybeSingle()
+  if (!t) return null
+  const { data: u } = await supabase
+    .from('usuarios')
+    .select('razon_social, nombre, apellido')
+    .eq('id', session.user.id)
+    .maybeSingle()
+  return { ...t, usuarios: u }
 }

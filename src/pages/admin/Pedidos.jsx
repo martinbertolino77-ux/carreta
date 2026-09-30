@@ -32,7 +32,7 @@ export default function AdminPedidos() {
     const { data } = await supabase.from('pedidos')
       .select(`id, numero, estado, tipo_actividad, tipo_cereal, producto_granel, modo_publicacion,
         destino_localidad, destino_provincia, camiones_necesarios, created_at, updated_at,
-        establecimientos(localidad, provincia),
+        establecimientos:establecimiento_id(localidad, provincia),
         productores(usuarios(nombre, apellido, razon_social, email))`)
       .order('created_at', { ascending: false })
       .limit(500)

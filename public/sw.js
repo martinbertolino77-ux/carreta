@@ -9,7 +9,6 @@ self.addEventListener('install', (event) => {
     caches.open(STATIC_CACHE).then((cache) => {
       const urls = [...new Set([
         '/',
-        '/index.html',
         '/manifest.json',
         ...WB_MANIFEST.map((entry) => entry.url)
       ])]

@@ -12,6 +12,16 @@ import Field, { Input } from '../../components/ui/Field'
 import Route from '../../components/ui/Route'
 import { formatNroPedido, formatFecha, formatNum } from '../../utils/format'
 
+const COL_WIDTHS_DETALLE = [12, 14, 20, 24, 24, 16, 14, 14, 22, 20, 14, 16, 14, 15, 16, 14, 13, 14, 12]
+const COL_WIDTHS_RESUMEN = [12, 14, 20, 24, 24, 16, 16, 16, 14, 30, 15, 16, 14, 13, 14, 14, 14, 12, 20]
+
+function aplicarFormato(ws, headers, colWidths) {
+  // Ancho de columnas
+  ws['!cols'] = colWidths.map(w => ({ wch: w }))
+  // Freeze primera fila
+  ws['!freeze'] = { xSplit: 0, ySplit: 1 }
+}
+
 export default function Historial() {
   const navigate = useNavigate()
   const { usuario } = useAuth()
@@ -35,60 +45,45 @@ export default function Historial() {
   const descargar = async () => {
     const XLSX = await import('xlsx')
 
-    // ── Datos detalle por camión ──────────────────────────
     const { data: detalle } = await supabase.rpc('historial_productor_detalle', {
       p_desde: desde || null,
       p_hasta: hasta || null,
     })
 
-    const filasDetalle = (detalle || []).map(r => ({
-      'Nro. Pedido':        formatNroPedido(r.numero),
-      'Tipo de carga':      r.tipo_carga,
-      'Establecimiento':    r.establecimiento,
-      'Origen':             `${r.origen_localidad}, ${r.origen_provincia}`,
-      'Destino':            `${r.destino_localidad}, ${r.destino_provincia}`,
-      'Fecha publicación':  r.fecha_publicacion,
-      'Fecha carga':        r.fecha_carga,
-      'Fecha descarga':     r.fecha_descarga,
-      'Transportista':      r.transportista,
-      'Chofer':             r.chofer,
-      'Dominio chasis':     r.dominio_chasis,
-      'Dominio remolque':   r.dominio_remolque,
-      'Kilos asignados':    r.kilos_asignados,
-      'Precio acordado':    r.precio_acordado,
-      'Forma de pago':      r.forma_pago,
-      'Monto final':        r.monto_final,
-      'Estado':             r.estado,
-      'Calif. recibida':    r.calif_recibida,
-      'Calif. dada':        r.calif_dada,
-    }))
+    const headersDetalle = ['Nro. Pedido','Tipo de carga','Establecimiento','Origen','Destino','Fecha publicación','Fecha carga','Fecha descarga','Transportista','Chofer','Dominio chasis','Dominio remolque','Kilos asignados','Precio acordado','Forma de pago','Monto final','Estado','Calif. recibida','Calif. dada']
 
-    // ── Datos resumen por pedido ──────────────────────────
-    const filasResumen = items.map(r => ({
-      'Nro. Pedido':          formatNroPedido(r.numero),
-      'Tipo de carga':        r.tipo_carga,
-      'Establecimiento':      r.establecimiento,
-      'Origen':               `${r.origen_localidad}, ${r.origen_provincia}`,
-      'Destino':              `${r.destino_localidad}, ${r.destino_provincia}`,
-      'Fecha publicación':    r.fecha_publicacion,
-      'Camiones necesarios':  r.camiones_necesarios,
-      'Camiones cubiertos':   r.camiones_cubiertos,
-      'Kilos estimados':      r.kilos_estimados,
-      'Transportistas':       r.transportistas,
-      'Precio acordado':      r.precio_acordado,
-      'Forma de pago':        r.forma_pago,
-      'Monto total':          r.monto_final,
-      'Estado':               r.estado,
-      'Fecha carga':          r.fecha_carga,
-      'Fecha descarga':       r.fecha_descarga,
-      'Calif. recibida':      r.calif_recibida,
-      'Calif. dada':          r.calif_dada,
-      'Mis notas':            r.mis_notas,
-    }))
+    const filasDetalle = (detalle || []).map(r => [
+      formatNroPedido(r.numero), r.tipo_carga, r.establecimiento,
+      `${r.origen_localidad}, ${r.origen_provincia}`, `${r.destino_localidad}, ${r.destino_provincia}`,
+      r.fecha_publicacion, r.fecha_carga, r.fecha_descarga,
+      r.transportista, r.chofer, r.dominio_chasis, r.dominio_remolque,
+      r.kilos_asignados, r.precio_acordado, r.forma_pago, r.monto_final,
+      r.estado, r.calif_recibida, r.calif_dada
+    ])
+
+    const headersResumen = ['Nro. Pedido','Tipo de carga','Establecimiento','Origen','Destino','Fecha publicación','Camiones necesarios','Camiones cubiertos','Kilos estimados','Transportistas','Precio acordado','Forma de pago','Monto total','Estado','Fecha carga','Fecha descarga','Calif. recibida','Calif. dada','Mis notas']
+
+    const filasResumen = items.map(r => [
+      formatNroPedido(r.numero), r.tipo_carga, r.establecimiento,
+      `${r.origen_localidad}, ${r.origen_provincia}`, `${r.destino_localidad}, ${r.destino_provincia}`,
+      r.fecha_publicacion, r.camiones_necesarios, r.camiones_cubiertos, r.kilos_estimados,
+      r.transportistas, r.precio_acordado, r.forma_pago, r.monto_final,
+      r.estado, r.fecha_carga, r.fecha_descarga, r.calif_recibida, r.calif_dada, r.mis_notas
+    ])
 
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasDetalle), 'Detalle por camión')
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasResumen), 'Resumen por pedido')
+
+    // Hoja 1
+    const ws1 = XLSX.utils.aoa_to_sheet([headersDetalle, ...filasDetalle])
+    ws1['!cols'] = COL_WIDTHS_DETALLE.map(w => ({ wch: w }))
+    ws1['!freeze'] = { xSplit: 0, ySplit: 1 }
+    XLSX.utils.book_append_sheet(wb, ws1, 'Detalle por camión')
+
+    // Hoja 2
+    const ws2 = XLSX.utils.aoa_to_sheet([headersResumen, ...filasResumen])
+    ws2['!cols'] = COL_WIDTHS_RESUMEN.map(w => ({ wch: w }))
+    ws2['!freeze'] = { xSplit: 0, ySplit: 1 }
+    XLSX.utils.book_append_sheet(wb, ws2, 'Resumen por pedido')
 
     const suffix = desde || hasta ? `_${desde || ''}_${hasta || ''}` : '_completo'
     XLSX.writeFile(wb, `carreta_historial_productor${suffix}.xlsx`)

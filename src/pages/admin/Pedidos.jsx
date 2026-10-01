@@ -43,7 +43,7 @@ export default function AdminPedidos() {
   async function cargarOfertas(pedidoId) {
     if (ofertas[pedidoId]) return
     const { data } = await supabase.from('ofertas')
-      .select('id, estado, precio, created_at, transportistas(usuarios(razon_social, nombre, apellido, telefono))')
+      .select('id, estado, precio_tn, precio_km, created_at, transportistas(usuarios(razon_social, nombre, apellido, telefono))')
       .eq('pedido_id', pedidoId)
       .order('created_at', { ascending: false })
     setOfertas(o => ({ ...o, [pedidoId]: data || [] }))
@@ -211,7 +211,11 @@ export default function AdminPedidos() {
                               <div className="text-[10px] text-gray-400">{transp?.telefono || ''} · {o.created_at?.slice(0, 10)}</div>
                             </div>
                             <div className="text-right">
-                              {o.precio && <div className="text-xs font-bold text-gray-900">${o.precio}</div>}
+                              {(o.precio_tn || o.precio_km) && (
+                                <div className="text-xs font-bold text-gray-900">
+                                  {o.precio_tn ? `$${o.precio_tn}/tn` : `$${o.precio_km}/km`}
+                                </div>
+                              )}
                               <span className={`text-[10px] px-2 py-0.5 rounded-full bg-${colorOferta[o.estado] || 'gray'}-100 text-${colorOferta[o.estado] || 'gray'}-700`}>
                                 {o.estado}
                               </span>

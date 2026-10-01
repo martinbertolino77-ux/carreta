@@ -235,7 +235,7 @@ export default function AdminPedidos() {
                         const transp = o.transportistas?.usuarios
                         const nombre = transp?.razon_social || `${transp?.nombre || ''} ${transp?.apellido || ''}`.trim()
                         return (
-                          <div key={o.id} className="bg-white rounded-lg border border-gray-100 px-3 py-2 flex items-center justify-between">
+                          <div key={o.id} className={`rounded-lg border px-3 py-2 flex items-center justify-between ${o.estado === 'seleccionada' ? 'bg-green-50 border-green-200' : 'bg-white border-gray-100'}`}>
                             <div>
                               <div className="text-xs font-medium text-gray-800">🚛 {nombre || '—'}</div>
                               <div className="text-[10px] text-gray-400">{transp?.telefono || ''} · {o.created_at?.slice(0, 10)}</div>

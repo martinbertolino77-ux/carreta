@@ -10,7 +10,8 @@ import Button from '../../components/ui/Button'
 import Field, { Input } from '../../components/ui/Field'
 import Route from '../../components/ui/Route'
 import { formatNroPedido, formatFecha, formatNum } from '../../utils/format'
-import * as XLSX from 'xlsx'
+
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
 export default function HistorialTransp() {
   const navigate = useNavigate()
@@ -31,32 +32,87 @@ export default function HistorialTransp() {
     setLoading(false)
   }
 
-  const descargar = () => {
-    const filas = items.map(r => ({
-      'Nro pedido': formatNroPedido(r.numero),
-      'Productor': r.productor,
-      'Fecha publicación': r.fecha_publicacion,
-      'Tipo de carga': r.tipo_carga,
-      'Origen': `${r.origen_localidad}, ${r.origen_provincia}`,
-      'Destino': `${r.destino_localidad}, ${r.destino_provincia}`,
+  const descargar = async () => {
+    const XLSX = await import('xlsx')
+
+    // ── Hoja 1: Detalle por viaje ─────────────────────────
+    const filasDetalle = items.map(r => ({
+      'Nro. Pedido':        formatNroPedido(r.numero),
+      'Tipo de carga':      r.tipo_carga,
+      'Productor':          r.productor,
+      'Origen':             `${r.origen_localidad}, ${r.origen_provincia}`,
+      'Destino':            `${r.destino_localidad}, ${r.destino_provincia}`,
+      'Fecha publicación':  r.fecha_publicacion,
+      'Fecha carga':        r.fecha_carga,
+      'Fecha descarga':     r.fecha_descarga,
+      'Dominio chasis':     r.dominio_chasis,
+      'Dominio remolque':   r.dominio_remolque,
+      'Chofer':             r.chofer,
       'Camiones aceptados': r.camiones_aceptados,
-      'Chofer': r.chofer,
-      'Dominio chasis': r.dominio_chasis,
-      'Dominio remolque': r.dominio_remolque,
-      'Precio acordado': r.precio_acordado,
-      'Forma de pago': r.forma_pago,
-      'Monto final': r.monto_final,
-      'Kilos asignados': r.kilos_asignados,
-      'Estado': r.estado,
-      'Fecha carga': r.fecha_carga,
-      'Fecha descarga': r.fecha_descarga,
-      'Calificación recibida': r.calif_recibida,
-      'Calificación dada': r.calif_dada,
-      'Mis notas': r.mis_notas,
+      'Kilos asignados':    r.kilos_asignados,
+      'Precio acordado':    r.precio_acordado,
+      'Forma de pago':      r.forma_pago,
+      'Monto final':        r.monto_final,
+      'Estado':             r.estado,
+      'Calif. recibida':    r.calif_recibida,
+      'Calif. dada':        r.calif_dada,
+      'Mis notas':          r.mis_notas,
     }))
+
+    // ── Hoja 2: Resumen financiero por mes ────────────────
+    const porMes = {}
+    items.forEach(r => {
+      const fecha = r.fecha_publicacion || r.fecha_carga
+      if (!fecha) return
+      const d = new Date(fecha)
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      const label = `${MESES[d.getMonth()]} ${d.getFullYear()}`
+      if (!porMes[key]) porMes[key] = { label, realizados: 0, cancelados: 0, kilos: 0, monto: 0, califs: [] }
+      if (r.estado === 'completado') {
+        porMes[key].realizados++
+        porMes[key].kilos += Number(r.kilos_asignados || 0)
+        porMes[key].monto += Number(r.monto_final || 0)
+        if (r.calif_recibida) porMes[key].califs.push(Number(r.calif_recibida))
+      } else {
+        porMes[key].cancelados++
+      }
+    })
+
+    const filasResumen = Object.keys(porMes).sort().map(key => {
+      const m = porMes[key]
+      const promCalif = m.califs.length ? (m.califs.reduce((a, b) => a + b, 0) / m.califs.length).toFixed(1) : '—'
+      const promViaje = m.realizados ? Math.round(m.monto / m.realizados) : 0
+      return {
+        'Mes':                    m.label,
+        'Viajes realizados':      m.realizados,
+        'Viajes cancelados':      m.cancelados,
+        'Kilos totales':          m.kilos || '—',
+        'Monto total cobrado':    m.monto || '—',
+        'Promedio por viaje':     promViaje || '—',
+        'Calificación promedio':  promCalif,
+      }
+    })
+
+    // Fila totales
+    const totalReal = filasResumen.reduce((a, r) => a + (r['Viajes realizados'] || 0), 0)
+    const totalCanc = filasResumen.reduce((a, r) => a + (r['Viajes cancelados'] || 0), 0)
+    const totalKilos = filasResumen.reduce((a, r) => a + (typeof r['Kilos totales'] === 'number' ? r['Kilos totales'] : 0), 0)
+    const totalMonto = filasResumen.reduce((a, r) => a + (typeof r['Monto total cobrado'] === 'number' ? r['Monto total cobrado'] : 0), 0)
+
+    filasResumen.push({
+      'Mes': 'TOTAL',
+      'Viajes realizados': totalReal,
+      'Viajes cancelados': totalCanc,
+      'Kilos totales': totalKilos || '—',
+      'Monto total cobrado': totalMonto || '—',
+      'Promedio por viaje': totalReal ? Math.round(totalMonto / totalReal) : '—',
+      'Calificación promedio': '—',
+    })
+
     const wb = XLSX.utils.book_new()
-    const ws = XLSX.utils.json_to_sheet(filas)
-    XLSX.utils.book_append_sheet(wb, ws, 'Historial')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasDetalle), 'Detalle por viaje')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasResumen), 'Resumen financiero')
+
     const suffix = desde || hasta ? `_${desde || ''}_${hasta || ''}` : '_completo'
     XLSX.writeFile(wb, `carreta_historial_transportista${suffix}.xlsx`)
   }

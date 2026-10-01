@@ -43,10 +43,40 @@ export default function AdminPedidos() {
   async function cargarOfertas(pedidoId) {
     if (ofertas[pedidoId]) return
     const { data } = await supabase.from('ofertas')
-      .select('id, estado, precio_tn, precio_km, created_at, transportistas(usuarios(razon_social, nombre, apellido, telefono))')
+      .select('id, estado, precio_tn, precio_km, created_at, transportista_id')
       .eq('pedido_id', pedidoId)
       .order('created_at', { ascending: false })
-    setOfertas(o => ({ ...o, [pedidoId]: data || [] }))
+
+    if (!data || data.length === 0) {
+      setOfertas(o => ({ ...o, [pedidoId]: [] }))
+      return
+    }
+
+    // Traer transportistas y usuarios por separado
+    const transpIds = [...new Set(data.map(o => o.transportista_id))]
+    const { data: transps } = await supabase
+      .from('transportistas')
+      .select('id, usuario_id')
+      .in('id', transpIds)
+
+    const userIds = (transps || []).map(t => t.usuario_id)
+    const { data: users } = await supabase
+      .from('usuarios')
+      .select('id, razon_social, nombre, apellido, telefono')
+      .in('id', userIds)
+
+    const transpMap = {}
+    ;(transps || []).forEach(t => {
+      const u = (users || []).find(u => u.id === t.usuario_id)
+      transpMap[t.id] = { ...t, usuarios: u }
+    })
+
+    const ofertasConTransp = data.map(o => ({
+      ...o,
+      transportistas: transpMap[o.transportista_id] || null
+    }))
+
+    setOfertas(o => ({ ...o, [pedidoId]: ofertasConTransp }))
   }
 
   const toggleExpandido = async (p) => {

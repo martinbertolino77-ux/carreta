@@ -44,7 +44,7 @@ export const ESTADOS_PEDIDO = {
   datos_operativos_enviados: { label:'Datos enviados',       color:'blue' },
   esperando_documentacion:   { label:'Datos enviados',       color:'blue' },   // en desuso
   en_camino:                 { label:'En camino',            color:'blue' },
-  entrega_informada:         { label:'Descargado',           color:'purple' },
+  entrega_informada:           { label:'Entrega informada',           color:'purple' },
   completado:                { label:'Finalizado',           color:'green' },
   cancelado:                 { label:'Cancelado',            color:'red' },
 }

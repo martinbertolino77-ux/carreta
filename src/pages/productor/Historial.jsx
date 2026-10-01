@@ -12,8 +12,8 @@ import Field, { Input } from '../../components/ui/Field'
 import Route from '../../components/ui/Route'
 import { formatNroPedido, formatFecha, formatNum } from '../../utils/format'
 
-const COL_WIDTHS_DETALLE = [12, 14, 20, 24, 24, 16, 14, 14, 22, 20, 14, 16, 14, 15, 16, 14, 13, 14, 12]
-const COL_WIDTHS_RESUMEN = [12, 14, 20, 24, 24, 16, 16, 16, 14, 30, 15, 16, 14, 13, 14, 14, 14, 12, 20]
+const COL_WIDTHS_DETALLE = [12, 14, 20, 24, 24, 16, 14, 22, 20, 14, 16, 14, 15, 16, 14, 13, 14, 12]
+const COL_WIDTHS_RESUMEN = [12, 14, 20, 24, 24, 16, 16, 16, 14, 30, 15, 16, 14, 13, 14, 14, 12, 20]
 
 function aplicarFormato(ws, headers, colWidths) {
   // Ancho de columnas
@@ -50,25 +50,25 @@ export default function Historial() {
       p_hasta: hasta || null,
     })
 
-    const headersDetalle = ['Nro. Pedido','Tipo de carga','Establecimiento','Origen','Destino','Fecha publicación','Fecha carga','Fecha descarga','Transportista','Chofer','Dominio chasis','Dominio remolque','Kilos asignados','Precio acordado','Forma de pago','Monto final','Estado','Calif. recibida','Calif. dada']
+    const headersDetalle = ['Nro. Pedido','Tipo de carga','Establecimiento','Origen','Destino','Fecha publicación','Fecha descarga','Transportista','Chofer','Dominio chasis','Dominio remolque','Kilos asignados','Precio acordado','Forma de pago','Monto final','Estado','Calif. recibida','Calif. dada']
 
     const filasDetalle = (detalle || []).map(r => [
       formatNroPedido(r.numero), r.tipo_carga, r.establecimiento,
       `${r.origen_localidad}, ${r.origen_provincia}`, `${r.destino_localidad}, ${r.destino_provincia}`,
-      r.fecha_publicacion, r.fecha_carga, r.fecha_descarga,
+      r.fecha_publicacion, r.fecha_descarga,
       r.transportista, r.chofer, r.dominio_chasis, r.dominio_remolque,
       r.kilos_asignados, r.precio_acordado, r.forma_pago, r.monto_final,
       r.estado, r.calif_recibida, r.calif_dada
     ])
 
-    const headersResumen = ['Nro. Pedido','Tipo de carga','Establecimiento','Origen','Destino','Fecha publicación','Camiones necesarios','Camiones cubiertos','Kilos estimados','Transportistas','Precio acordado','Forma de pago','Monto total','Estado','Fecha carga','Fecha descarga','Calif. recibida','Calif. dada','Mis notas']
+    const headersResumen = ['Nro. Pedido','Tipo de carga','Establecimiento','Origen','Destino','Fecha publicación','Camiones necesarios','Camiones cubiertos','Kilos estimados','Transportistas','Precio acordado','Forma de pago','Monto total','Estado','Fecha descarga','Calif. recibida','Calif. dada','Mis notas']
 
     const filasResumen = items.map(r => [
       formatNroPedido(r.numero), r.tipo_carga, r.establecimiento,
       `${r.origen_localidad}, ${r.origen_provincia}`, `${r.destino_localidad}, ${r.destino_provincia}`,
       r.fecha_publicacion, r.camiones_necesarios, r.camiones_cubiertos, r.kilos_estimados,
       r.transportistas, r.precio_acordado, r.forma_pago, r.monto_final,
-      r.estado, r.fecha_carga, r.fecha_descarga, r.calif_recibida, r.calif_dada, r.mis_notas
+      r.estado, r.fecha_descarga, r.calif_recibida, r.calif_dada, r.mis_notas
     ])
 
     const wb = XLSX.utils.book_new()
@@ -128,8 +128,6 @@ export default function Historial() {
               <Route origen={`${r.origen_localidad}, ${r.origen_provincia}`}
                 destino={`${r.destino_localidad}, ${r.destino_provincia}`} />
               <div className="text-xs text-gray-400 mt-1">
-                {r.fecha_carga && `Carga: ${formatFecha(r.fecha_carga)}`}
-                {r.fecha_carga && r.fecha_descarga && ' · '}
                 {r.fecha_descarga && `Descarga: ${formatFecha(r.fecha_descarga)}`}
               </div>
               {r.transportistas && <div className="text-xs text-gray-500 mt-0.5">🚛 {r.transportistas}</div>}

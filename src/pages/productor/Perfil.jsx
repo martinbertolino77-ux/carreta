@@ -19,7 +19,7 @@ import Contador from '../../components/ui/Contador'
 
 const INIT_ESTAB = {
   nombre: '', domicilio: '', localidad: '',
-  departamento: '', provincia: '', link_maps: '', telefono: '', lat: null, lng: null,
+  departamento: '', provincia: '', link_maps: '', telefono: '', whatsapp: '', lat: null, lng: null,
 }
 
 export default function Perfil() {
@@ -82,7 +82,7 @@ export default function Perfil() {
   const abrirNuevo = () => { setEditando(null); setForm(INIT_ESTAB); setError(''); setModalEstab(true) }
   const abrirEditar = (e) => {
     setEditando(e.id)
-    setForm({ nombre: e.nombre, domicilio: e.domicilio, localidad: e.localidad, departamento: e.departamento, provincia: e.provincia, link_maps: e.link_maps || '', telefono: e.telefono || '', lat: e.lat || null, lng: e.lng || null })
+    setForm({ nombre: e.nombre, domicilio: e.domicilio, localidad: e.localidad, departamento: e.departamento, provincia: e.provincia, link_maps: e.link_maps || '', telefono: e.telefono || '', whatsapp: e.whatsapp || '', lat: e.lat || null, lng: e.lng || null })
     setError(''); setModalEstab(true)
   }
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -165,6 +165,12 @@ export default function Perfil() {
               <div key={label} className="flex items-start py-2 border-b border-gray-50 last:border-0">
                 <span className="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">{label}</span>
                 <span className="text-xs font-medium text-gray-800 flex-1">{val}</span>
+                {label === 'Teléfono' && (
+                  <a href={`https://wa.me/54${val.replace(/\D/g,'')}`} target="_blank" rel="noreferrer"
+                    className="text-xs bg-green-500 text-white px-2 py-0.5 rounded-full flex-shrink-0 ml-2">
+                    💬 WA
+                  </a>
+                )}
               </div>
             ) : null)
           )}
@@ -188,6 +194,10 @@ export default function Perfil() {
                   <div className="text-sm font-semibold text-gray-900">{e.nombre}</div>
                   <div className="text-xs text-gray-500 mt-0.5">📍 {e.localidad}, {e.provincia}</div>
                   {e.telefono && <div className="text-xs text-gray-400 mt-0.5">📞 {e.telefono}</div>}
+                  {e.whatsapp && (
+                    <a href={`https://wa.me/54${e.whatsapp.replace(/\D/g,'')}`} target="_blank" rel="noreferrer"
+                      className="text-xs text-green-600 font-medium mt-0.5 block">💬 WhatsApp</a>
+                  )}
                   {e.link_maps && <a href={e.link_maps} target="_blank" rel="noreferrer" className="text-xs text-azul-600 mt-0.5 block">Ver en Maps</a>}
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0 ml-2">
@@ -245,6 +255,7 @@ export default function Perfil() {
           />
         )}
         <Field label="Teléfono (opcional)"><Input placeholder="Ej: 3462 412345" value={form.telefono} onChange={e => setF('telefono', e.target.value)} /></Field>
+        <Field label="WhatsApp (opcional)" hint="Número sin 0 ni 15, ej: 3462 412345"><Input placeholder="Ej: 3462 412345" value={form.whatsapp || ''} onChange={e => setF('whatsapp', e.target.value)} /></Field>
         {error && <Banner color="red" className="mb-3">{error}</Banner>}
         <Button onClick={guardarEstab} disabled={saving}>{saving ? 'Guardando…' : editando ? 'Guardar cambios' : 'Agregar establecimiento'}</Button>
         <Button variant="ghost" onClick={() => setModalEstab(false)} className="mt-2">Cancelar</Button>

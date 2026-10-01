@@ -203,6 +203,12 @@ export default function PerfilTransp() {
               <div key={label} className="flex items-start py-2 border-b border-gray-50 last:border-0">
                 <span className="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">{label}</span>
                 <span className="text-xs font-medium text-gray-800 flex-1">{val}</span>
+                {label === 'Teléfono' && (
+                  <a href={`https://wa.me/54${val.replace(/\D/g,'')}`} target="_blank" rel="noreferrer"
+                    className="text-xs bg-green-500 text-white px-2 py-0.5 rounded-full flex-shrink-0 ml-2">
+                    💬 WA
+                  </a>
+                )}
               </div>
             ) : null)
           )}

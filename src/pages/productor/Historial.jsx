@@ -52,6 +52,7 @@ export default function Historial() {
 
     const headersDetalle = ['Nro. Pedido','Tipo de carga','Establecimiento','Origen','Destino','Fecha publicación','Fecha descarga','Transportista','Chofer','Dominio chasis','Dominio remolque','Kilos asignados','Precio acordado','Forma de pago','Monto final','Estado','Calif. recibida','Calif. dada']
 
+    console.log('detalle rows:', detalle?.length, detalle)
     const filasDetalle = (detalle || []).map(r => [
       formatNroPedido(r.numero), r.tipo_carga, r.establecimiento,
       `${r.origen_localidad}, ${r.origen_provincia}`, `${r.destino_localidad}, ${r.destino_provincia}`,

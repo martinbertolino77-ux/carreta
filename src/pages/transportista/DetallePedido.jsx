@@ -55,6 +55,9 @@ export default function DetallePedidoTransp() {
   const [modalCalif, setModalCalif] = useState(false)
   const [montoFinal, setMontoFinal] = useState('')
   const [modalMonto, setModalMonto] = useState(false)
+  const [modalDescarga, setModalDescarga] = useState(false)
+  const [camionDescargando, setCamionDescargando] = useState(null)
+  const [formDescarga, setFormDescarga] = useState({ kilos_descargados: '', humedad: '', cuerpos_extraños: '', granos_dañados: '' })
   const [modalIncidencia, setModalIncidencia] = useState(null) // camionViaje id
   const [formInc, setFormInc] = useState({ tipo:'rotura', descripcion:'', chasisId:'', chasisDom:'', chasisTara:'', acopladoId:'', acopladoDom:'', acopladoTara:'', choferId:'', choferNombre:'', choferDni:'' })
   const [savingInc, setSavingInc] = useState(false)
@@ -268,16 +271,31 @@ export default function DetallePedidoTransp() {
     finally { setSaving(false) }
   }
 
-  // Paso 6: informar descarga (todos descargados → Descargado)
-  const informarDescarga = async (camionId) => {
-    const cv = camionesViaje.find(c => c.id === camionId)
-    const ok = confirm(
-      `¿Confirmás que el camión ${cv?.chasis?.dominio || ''}${cv?.acoplados ? ' + ' + cv.acoplados.dominio : ''} ` +
-      `YA DESCARGÓ en ${pedido?.destino_localidad || 'destino'}?\n\nNo se puede deshacer.`
-    )
-    if (!ok) return
-    const { error } = await supabase.rpc('informar_descarga', { p_camion_viaje_id: camionId })
+  // Paso 6: informar descarga
+  const abrirModalDescarga = (camionId) => {
+    setCamionDescargando(camionId)
+    setFormDescarga({ kilos_descargados: '', humedad: '', cuerpos_extraños: '', granos_dañados: '' })
+    setModalDescarga(true)
+  }
+
+  const confirmarDescarga = async () => {
+    if (!formDescarga.kilos_descargados) { alert('Ingresá los kilos descargados'); return }
+    const esGanadero = pedido?.tipo_actividad === 'ganadero'
+
+    // Guardar datos de descarga
+    const updateData = { kilos_descargados: Number(formDescarga.kilos_descargados) }
+    if (!esGanadero) {
+      if (formDescarga.humedad) updateData.humedad = Number(formDescarga.humedad)
+      if (formDescarga.cuerpos_extraños) updateData.cuerpos_extraños = Number(formDescarga.cuerpos_extraños)
+      if (formDescarga.granos_dañados) updateData.granos_dañados = Number(formDescarga.granos_dañados)
+    }
+    await supabase.from('camiones_viaje').update(updateData).eq('id', camionDescargando)
+
+    // Informar descarga
+    const { error } = await supabase.rpc('informar_descarga', { p_camion_viaje_id: camionDescargando })
     if (error) { alert(error.message); return }
+    setModalDescarga(false)
+
     // Si todos descargaron → pedir monto final
     const doIds = (await supabase.from('datos_operativos').select('id')
       .eq('pedido_id', id).eq('transportista_id', transportista?.id)).data?.map(d => d.id) || []
@@ -527,7 +545,7 @@ export default function DetallePedidoTransp() {
                   <Button size="sm" variant="danger" onClick={() => { setModalIncidencia(cv.id); setFormInc(f => ({...f, tipo:'rotura', descripcion:'', chasisId:'', chasisDom:'', chasisTara:'', acopladoId:'', acopladoDom:'', acopladoTara:'', choferId:'', choferNombre:'', choferDni:''})) }} className="mt-2">
                     ⚠ Reportar incidencia
                   </Button>
-                  <Button size="sm" variant="secondary" onClick={() => informarDescarga(cv.id)} className="mt-1">
+                  <Button size="sm" variant="secondary" onClick={() => abrirModalDescarga(cv.id)} className="mt-1">
                     Informar descarga
                   </Button>
                   </>
@@ -763,6 +781,40 @@ export default function DetallePedidoTransp() {
       </Modal>
 
       <BottomTabs rol="transportista" />
+
+      {/* Modal informar descarga */}
+      <Modal open={modalDescarga} onClose={() => setModalDescarga(false)} title="Informar descarga">
+        <div className="text-xs text-gray-500 mb-4">
+          Completá los datos de la descarga. Los kilos son obligatorios.
+        </div>
+        <Field label="Kilos descargados *">
+          <Input type="number" placeholder="Ej: 29500"
+            value={formDescarga.kilos_descargados}
+            onChange={e => setFormDescarga(f => ({ ...f, kilos_descargados: e.target.value }))} />
+        </Field>
+        {pedido?.tipo_actividad !== 'ganadero' && (
+          <>
+            <Field label="Humedad % (opcional)">
+              <Input type="number" step="0.1" placeholder="Ej: 13.5"
+                value={formDescarga.humedad}
+                onChange={e => setFormDescarga(f => ({ ...f, humedad: e.target.value }))} />
+            </Field>
+            <Field label="Cuerpos extraños % (opcional)">
+              <Input type="number" step="0.1" placeholder="Ej: 0.5"
+                value={formDescarga.cuerpos_extraños}
+                onChange={e => setFormDescarga(f => ({ ...f, cuerpos_extraños: e.target.value }))} />
+            </Field>
+            <Field label="Granos dañados % (opcional)">
+              <Input type="number" step="0.1" placeholder="Ej: 1.2"
+                value={formDescarga.granos_dañados}
+                onChange={e => setFormDescarga(f => ({ ...f, granos_dañados: e.target.value }))} />
+            </Field>
+          </>
+        )}
+        <Button onClick={confirmarDescarga}>Confirmar descarga</Button>
+        <Button variant="ghost" onClick={() => setModalDescarga(false)} className="mt-2">Cancelar</Button>
+      </Modal>
+
     </Shell>
   )
 }

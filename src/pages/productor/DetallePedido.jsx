@@ -659,8 +659,8 @@ export default function DetallePedido() {
           )
         })}
 
-        {/* Paso 7: resumen */}
-        {pedido.estado === 'entrega_informada' && (
+        {/* Paso 7: resumen — solo si hay más de un transportista */}
+        {pedido.estado === 'entrega_informada' && aceptadas.length > 1 && (
           <Banner color="purple" title="📦 Descarga informada">
             Confirmá la descarga en la tarjeta de cada transportista.
           </Banner>

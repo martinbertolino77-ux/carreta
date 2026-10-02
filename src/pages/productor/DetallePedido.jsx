@@ -630,6 +630,14 @@ export default function DetallePedido() {
                       </button>
                     )}
                     {cv.fecha_descarga && <div className="text-xs text-verde-600 mt-1">✅ Descarga: {formatFecha(cv.fecha_descarga)}</div>}
+                    {cv.kilos_descargados && (
+                      <div className="text-xs text-gray-700 mt-1 bg-gray-50 rounded-lg px-2 py-1.5 space-y-0.5">
+                        <div>⚖️ <b>Kilos descargados:</b> {formatNum(cv.kilos_descargados)} kg</div>
+                        {cv.humedad != null && <div>💧 Humedad: {cv.humedad}%</div>}
+                        {cv['cuerpos_extraños'] != null && <div>🪨 Cuerpos extraños: {cv['cuerpos_extraños']}%</div>}
+                        {cv['granos_dañados'] != null && <div>⚠️ Granos dañados: {cv['granos_dañados']}%</div>}
+                      </div>
+                    )}
                   </div>
                 )
               })}

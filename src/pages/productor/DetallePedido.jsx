@@ -476,11 +476,7 @@ export default function DetallePedido() {
                           ✓ {o.camiones_aceptados} aceptado{o.camiones_aceptados > 1 ? 's' : ''}
                         </div>
                       )}
-                  {(notasOferta[o.id] || o.nota_productor) && !['enviada','en_pausa'].includes(o.estado) && (
-                    <div className="text-xs bg-amber-50 border border-amber-100 rounded-[8px] px-2.5 py-1.5 mt-1 text-gray-700">
-                      📝 {notasOferta[o.id] || o.nota_productor}
-                    </div>
-                  )}
+
                     </div>
                     <Badge color={eo.color}>{eo.label}</Badge>
                   </div>

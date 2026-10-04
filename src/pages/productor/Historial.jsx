@@ -73,14 +73,14 @@ export default function Historial() {
       r.transportistas, r.estado, r.fecha_descarga, r.calif_recibida, r.calif_dada
     ])
 
-    const headersTransp = ['Nro. Pedido','Tipo de carga','Establecimiento','Origen','Destino','Fecha publicación','Transportista','Camiones','Kilos totales','Precio acordado','Forma de pago','Monto final','Estado','Fecha descarga','Calif. recibida','Calif. dada','Mis notas']
+    const headersTransp = ['Nro. Pedido','Tipo de carga','Establecimiento','Origen','Destino','Fecha publicación','Transportista','Camiones','Kilos totales','Precio acordado','Forma de pago','Monto final','Estado','Fecha descarga','Calif. recibida','Calif. dada','Nota negociación']
 
     const filasTransp = transportistas.map(r => [
       formatNroPedido(r.numero), r.tipo_carga, r.establecimiento,
       `${r.origen_localidad}, ${r.origen_provincia}`, `${r.destino_localidad}, ${r.destino_provincia}`,
       r.fecha_publicacion, r.transportista, r.camiones_aceptados, r.kilos_totales,
       r.precio_acordado, r.forma_pago, r.monto_final,
-      r.estado, r.fecha_descarga, r.calif_recibida, r.calif_dada, r.mis_notas
+      r.estado, r.fecha_descarga, r.calif_recibida, r.calif_dada, r.nota_negociacion
     ])
 
     const wb = XLSX.utils.book_new()

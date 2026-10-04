@@ -26,6 +26,7 @@ export default function Historial() {
   const navigate = useNavigate()
   const { usuario } = useAuth()
   const [items, setItems] = useState([])
+  const [transportistas, setTransportistas] = useState([])
   const [loading, setLoading] = useState(true)
   const [desde, setDesde] = useState('')
   const [hasta, setHasta] = useState('')
@@ -34,11 +35,12 @@ export default function Historial() {
 
   async function cargar() {
     setLoading(true)
-    const { data } = await supabase.rpc('historial_productor', {
-      p_desde: desde || null,
-      p_hasta: hasta || null,
-    })
+    const [{ data }, { data: transp }] = await Promise.all([
+      supabase.rpc('historial_productor', { p_desde: desde || null, p_hasta: hasta || null }),
+      supabase.rpc('historial_productor_transportista', { p_desde: desde || null, p_hasta: hasta || null }),
+    ])
     setItems(data || [])
+    setTransportistas(transp || [])
     setLoading(false)
   }
 
@@ -62,13 +64,22 @@ export default function Historial() {
       r.estado, r.calif_recibida, r.calif_dada
     ])
 
-    const headersResumen = ['Nro. Pedido','Tipo de carga','Establecimiento','Origen','Destino','Fecha publicación','Camiones necesarios','Camiones cubiertos','Kilos estimados','Transportistas','Precio acordado','Forma de pago','Monto total','Estado','Fecha descarga','Calif. recibida','Calif. dada','Mis notas']
+    const headersResumen = ['Nro. Pedido','Tipo de carga','Establecimiento','Origen','Destino','Fecha publicación','Camiones necesarios','Camiones cubiertos','Kilos estimados','Transportistas','Estado','Fecha descarga','Calif. recibida','Calif. dada']
 
     const filasResumen = items.map(r => [
       formatNroPedido(r.numero), r.tipo_carga, r.establecimiento,
       `${r.origen_localidad}, ${r.origen_provincia}`, `${r.destino_localidad}, ${r.destino_provincia}`,
       r.fecha_publicacion, r.camiones_necesarios, r.camiones_cubiertos, r.kilos_estimados,
-      r.transportistas, r.precio_acordado, r.forma_pago, r.monto_final,
+      r.transportistas, r.estado, r.fecha_descarga, r.calif_recibida, r.calif_dada
+    ])
+
+    const headersTransp = ['Nro. Pedido','Tipo de carga','Establecimiento','Origen','Destino','Fecha publicación','Transportista','Camiones','Kilos totales','Precio acordado','Forma de pago','Monto final','Estado','Fecha descarga','Calif. recibida','Calif. dada','Mis notas']
+
+    const filasTransp = transportistas.map(r => [
+      formatNroPedido(r.numero), r.tipo_carga, r.establecimiento,
+      `${r.origen_localidad}, ${r.origen_provincia}`, `${r.destino_localidad}, ${r.destino_provincia}`,
+      r.fecha_publicacion, r.transportista, r.camiones_aceptados, r.kilos_totales,
+      r.precio_acordado, r.forma_pago, r.monto_final,
       r.estado, r.fecha_descarga, r.calif_recibida, r.calif_dada, r.mis_notas
     ])
 
@@ -85,6 +96,12 @@ export default function Historial() {
     ws2['!cols'] = COL_WIDTHS_RESUMEN.map(w => ({ wch: w }))
     ws2['!freeze'] = { xSplit: 0, ySplit: 1 }
     XLSX.utils.book_append_sheet(wb, ws2, 'Resumen por pedido')
+
+    // Hoja 3
+    const ws3 = XLSX.utils.aoa_to_sheet([headersTransp, ...filasTransp])
+    ws3['!cols'] = [12,14,20,24,24,16,22,12,14,15,16,14,13,14,14,12,25].map(w => ({ wch: w }))
+    ws3['!freeze'] = { xSplit: 0, ySplit: 1 }
+    XLSX.utils.book_append_sheet(wb, ws3, 'Resumen por transportista')
 
     const suffix = desde || hasta ? `_${desde || ''}_${hasta || ''}` : '_completo'
     XLSX.writeFile(wb, `carreta_historial_productor${suffix}.xlsx`)

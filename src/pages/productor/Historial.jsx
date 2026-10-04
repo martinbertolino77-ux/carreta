@@ -54,7 +54,6 @@ export default function Historial() {
 
     const headersDetalle = ['Nro. Pedido','Tipo de carga','Establecimiento','Origen','Destino','Fecha publicación','Fecha descarga','Transportista','Chofer','Dominio chasis','Dominio remolque','Kilos asignados','Precio acordado','Forma de pago','Monto final','Estado','Calif. recibida','Calif. dada']
 
-    console.log('detalle rows:', detalle?.length, detalle)
     const filasDetalle = (detalle || []).map(r => [
       formatNroPedido(r.numero), r.tipo_carga, r.establecimiento,
       `${r.origen_localidad}, ${r.origen_provincia}`, `${r.destino_localidad}, ${r.destino_provincia}`,
@@ -64,13 +63,13 @@ export default function Historial() {
       r.estado, r.calif_recibida, r.calif_dada
     ])
 
-    const headersResumen = ['Nro. Pedido','Tipo de carga','Establecimiento','Origen','Destino','Fecha publicación','Camiones necesarios','Camiones cubiertos','Kilos estimados','Transportistas','Estado','Fecha descarga','Calif. recibida','Calif. dada']
+    const headersResumen = ['Nro. Pedido','Tipo de carga','Establecimiento','Origen','Destino','Fecha publicación','Camiones necesarios','Camiones cubiertos','Kilos estimados','Transportistas','Estado','Fecha descarga','Calif. recibida','Calif. dada','Nota final']
 
     const filasResumen = items.map(r => [
       formatNroPedido(r.numero), r.tipo_carga, r.establecimiento,
       `${r.origen_localidad}, ${r.origen_provincia}`, `${r.destino_localidad}, ${r.destino_provincia}`,
       r.fecha_publicacion, r.camiones_necesarios, r.camiones_cubiertos, r.kilos_estimados,
-      r.transportistas, r.estado, r.fecha_descarga, r.calif_recibida, r.calif_dada
+      r.transportistas, r.estado, r.fecha_descarga, r.calif_recibida, r.calif_dada, r.mis_notas
     ])
 
     const headersTransp = ['Nro. Pedido','Tipo de carga','Establecimiento','Origen','Destino','Fecha publicación','Transportista','Camiones','Kilos totales','Precio acordado','Forma de pago','Monto final','Estado','Fecha descarga','Calif. recibida','Calif. dada','Nota negociación']

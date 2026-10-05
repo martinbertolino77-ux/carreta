@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 
 export default function AdminLogin() {
@@ -39,7 +39,12 @@ export default function AdminLogin() {
           autoComplete="current-password"
           onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
           onKeyDown={e => e.key === 'Enter' && ingresar()}
-          className="w-full border border-gray-200 rounded-[10px] px-3 py-2.5 text-sm mb-4 bg-gray-50 focus:outline-none focus:border-gray-500" />
+          className="w-full border border-gray-200 rounded-[10px] px-3 py-2.5 text-sm mb-1 bg-gray-50 focus:outline-none focus:border-gray-500" />
+        <div className="text-right mb-4">
+          <Link to="/olvide-password" className="text-xs text-gray-500 hover:text-gray-700">
+            Olvidé mi contraseña
+          </Link>
+        </div>
         {error && <p className="text-xs text-red-600 mb-3">{error}</p>}
         <button onClick={ingresar} disabled={loading}
           className="w-full bg-gray-900 text-white rounded-[10px] py-2.5 text-sm font-bold hover:bg-gray-700 disabled:opacity-60">

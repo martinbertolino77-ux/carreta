@@ -5,9 +5,11 @@ import ProtectedRoute from './components/layout/ProtectedRoute'
 import AdminRoute from './components/layout/AdminRoute'
 
 // Auth
-const Login      = lazy(() => import('./pages/auth/Login'))
-const Roles      = lazy(() => import('./pages/auth/Roles'))
-const Registro   = lazy(() => import('./pages/auth/Registro'))
+const Login            = lazy(() => import('./pages/auth/Login'))
+const Roles            = lazy(() => import('./pages/auth/Roles'))
+const Registro         = lazy(() => import('./pages/auth/Registro'))
+const OlvidePassword   = lazy(() => import('./pages/auth/OlvidePassword'))
+const NuevaPassword    = lazy(() => import('./pages/auth/NuevaPassword'))
 
 // Productor
 const MisPedidos     = lazy(() => import('./pages/productor/MisPedidos'))
@@ -50,6 +52,8 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/registro" element={<Registro />} />
+            <Route path="/olvide-password" element={<OlvidePassword />} />
+            <Route path="/nueva-password" element={<NuevaPassword />} />
             <Route path="/roles" element={<ProtectedRoute><Roles /></ProtectedRoute>} />
             <Route path="/" element={<Navigate to="/login" replace />} />
 

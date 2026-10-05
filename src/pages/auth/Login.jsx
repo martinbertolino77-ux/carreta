@@ -48,8 +48,11 @@ export default function Login() {
             className="w-full border border-gray-200 rounded-[10px] px-3 py-2.5 text-sm mb-1 bg-gray-50
               focus:outline-none focus:border-verde-600 font-[Inter]"
           />
+          {/* ← Link activo ahora */}
           <div className="text-right mb-3">
-            <span className="text-xs text-azul-600 cursor-pointer">Olvidé mi contraseña</span>
+            <Link to="/olvide-password" className="text-xs text-azul-600">
+              Olvidé mi contraseña
+            </Link>
           </div>
           {error && <p className="text-xs text-red-600 mb-3">{error}</p>}
           <button

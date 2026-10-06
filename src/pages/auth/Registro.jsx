@@ -20,6 +20,7 @@ export default function Registro() {
   const [localidadElegida, setLocalidadElegida] = useState(false) // true = vino del buscador
   const [captchaToken, setCaptchaToken] = useState(null)
   const captchaRef = useRef(null)
+  const [registrado, setRegistrado] = useState(false)
 
   const [form, setForm] = useState({
     email: '', password: '', password2: '',
@@ -69,38 +70,31 @@ export default function Registro() {
     if (!captchaToken) { setError('Completá el captcha'); return }
     setLoading(true); setError('')
     try {
-      const { data: authData, error: authErr } = await supabase.auth.signUp({
+      const { error: authErr } = await supabase.auth.signUp({
         email: form.email,
         password: form.password,
-        options: { captchaToken }
+        options: {
+          captchaToken,
+          data: {
+            nombre: form.nombre,
+            apellido: form.apellido,
+            razon_social: form.razon_social,
+            cuit: limpiarCuit(form.cuit),
+            telefono: form.telefono,
+            domicilio: form.domicilio,
+            localidad: form.localidad,
+            provincia: form.provincia,
+            roles,
+          }
+        }
       })
       if (authErr) {
         captchaRef.current?.resetCaptcha()
         setCaptchaToken(null)
         throw authErr
       }
-      const uid = authData.user?.id
-      if (!uid) throw new Error('No se pudo crear el usuario')
 
-      const { error: loginErr } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password })
-      if (loginErr) throw new Error('Cuenta creada pero no se pudo iniciar sesión. Ingresá manualmente.')
-
-      const { error: userErr } = await supabase.from('usuarios').insert({
-        id: uid, nombre: form.nombre, apellido: form.apellido,
-        razon_social: form.razon_social,
-        cuit: limpiarCuit(form.cuit), telefono: form.telefono,
-        email: form.email, domicilio: form.domicilio,
-        localidad: form.localidad, provincia: form.provincia,
-        roles, renaper_validado: false,
-      })
-      if (userErr) throw userErr
-
-      if (roles.includes('productor'))
-        await supabase.from('productores').insert({ usuario_id: uid })
-      if (roles.includes('transportista'))
-        await supabase.from('transportistas').insert({ usuario_id: uid, alcance: 'provincia' })
-
-      navigate('/roles')
+      setRegistrado(true)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -114,6 +108,21 @@ export default function Registro() {
       <span className="text-xs font-medium text-gray-800 text-right break-all">{value}</span>
     </div>
   )
+
+  if (registrado) {
+    return (
+      <div className="min-h-screen bg-verde-800 flex flex-col items-center justify-center px-6 py-10">
+        <div className="bg-white rounded-2xl p-6 w-full max-w-sm text-center">
+          <div className="text-4xl mb-3">📧</div>
+          <h2 className="text-base font-bold text-gray-900 mb-2">Revisá tu correo</h2>
+          <p className="text-sm text-gray-500 mb-4">
+            Te enviamos un link de confirmación a <strong>{form.email}</strong>. Hacé clic ahí para activar tu cuenta.
+          </p>
+          <Link to="/login" className="text-verde-700 font-semibold text-sm">Ir a iniciar sesión</Link>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-verde-800 flex flex-col items-center justify-center px-6 py-10">

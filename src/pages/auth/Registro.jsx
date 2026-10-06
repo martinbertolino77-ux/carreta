@@ -1,8 +1,11 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { validarCuit, limpiarCuit } from '../../utils/validaciones'
 import LocalidadInput from '../../components/ui/LocalidadInput'
+import HCaptcha from '@hcaptcha/react-hcaptcha'
+
+const HCAPTCHA_SITE_KEY = '06e4ad0e-ff76-469c-a496-0c929448e82e'
 
 const STEPS = ['Credenciales', 'Datos', 'Roles', 'Confirmación']
 
@@ -15,6 +18,8 @@ export default function Registro() {
   const [error, setError]     = useState('')
   const [roles, setRoles]     = useState([])
   const [localidadElegida, setLocalidadElegida] = useState(false) // true = vino del buscador
+  const [captchaToken, setCaptchaToken] = useState(null)
+  const captchaRef = useRef(null)
 
   const [form, setForm] = useState({
     email: '', password: '', password2: '',
@@ -61,10 +66,19 @@ export default function Registro() {
   }
 
   const registrar = async () => {
+    if (!captchaToken) { setError('Completá el captcha'); return }
     setLoading(true); setError('')
     try {
-      const { data: authData, error: authErr } = await supabase.auth.signUp({ email: form.email, password: form.password })
-      if (authErr) throw authErr
+      const { data: authData, error: authErr } = await supabase.auth.signUp({
+        email: form.email,
+        password: form.password,
+        options: { captchaToken }
+      })
+      if (authErr) {
+        captchaRef.current?.resetCaptcha()
+        setCaptchaToken(null)
+        throw authErr
+      }
       const uid = authData.user?.id
       if (!uid) throw new Error('No se pudo crear el usuario')
 
@@ -226,6 +240,14 @@ export default function Registro() {
               <div className="text-[11px] font-semibold text-gray-400 mb-1">ROLES</div>
               <Fila label="Roles" value={roles.map(r => r.charAt(0).toUpperCase() + r.slice(1)).join(' + ')} />
             </div>
+            <div className="flex justify-center mb-3">
+              <HCaptcha
+                sitekey={HCAPTCHA_SITE_KEY}
+                onVerify={token => setCaptchaToken(token)}
+                onExpire={() => setCaptchaToken(null)}
+                ref={captchaRef}
+              />
+            </div>
           </>
         )}
 
@@ -237,7 +259,7 @@ export default function Registro() {
             Continuar →
           </button>
         ) : (
-          <button onClick={registrar} disabled={loading}
+          <button onClick={registrar} disabled={loading || !captchaToken}
             className="w-full bg-verde-700 text-white rounded-[10px] py-2.5 text-sm font-bold hover:bg-verde-800 transition-colors disabled:opacity-60 mb-3">
             {loading ? 'Creando cuenta…' : '✓ Confirmar y crear cuenta'}
           </button>

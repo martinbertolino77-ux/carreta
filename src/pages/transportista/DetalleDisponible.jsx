@@ -16,7 +16,7 @@ import { CATEGORIAS_HACIENDA } from '../../utils/constants'
 import { formatNroPedido, formatFecha, formatNum } from '../../utils/format'
 import { tituloPedido, iconoPedido, bgPedido } from '../../utils/pedido'
 import Contador from '../../components/ui/Contador'
-import { EQUIPOS } from '../../utils/constants'
+import { EQUIPOS, EQUIPOS_POR_ACTIVIDAD } from '../../utils/constants'
 
 export default function DetalleDisponible() {
   const { id } = useParams()
@@ -76,6 +76,8 @@ export default function DetalleDisponible() {
     if (!n || n < 1) { setError('Ingresá la cantidad de camiones'); return }
     if (n > pedido.camiones_necesarios) { setError(`El pedido necesita ${pedido.camiones_necesarios} camión(es)`); return }
     if (form.equipos.length === 0) { setError('Elegí el tipo de equipo que mandás'); return }
+    const permitidos = EQUIPOS_POR_ACTIVIDAD[pedido.tipo_actividad] || Object.keys(EQUIPOS)
+    if (form.equipos.some(e => !permitidos.includes(e))) { setError('Equipo no válido para este tipo de carga'); return }
 
     setSaving(true); setError('')
     try {
@@ -284,7 +286,9 @@ export default function DetalleDisponible() {
 
         <Field label="Equipo que mandás" hint="Podés elegir más de uno si mandás equipos distintos">
           <div className="flex gap-2 flex-wrap">
-            {Object.entries(EQUIPOS).map(([k, v]) => {
+            {Object.entries(EQUIPOS).filter(([k]) =>
+              (EQUIPOS_POR_ACTIVIDAD[pedido.tipo_actividad] || Object.keys(EQUIPOS)).includes(k)
+            ).map(([k, v]) => {
               const on = form.equipos.includes(k)
               return (
                 <button key={k} type="button"

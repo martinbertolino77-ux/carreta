@@ -150,6 +150,13 @@ export const VEHICULOS_POR_TIPO = {
   granel:   ['batea', 'acoplado'],
 }
 
+// Equipos válidos para ofertar según tipo de actividad del pedido (claves de TIPOS_REMOLQUE)
+export const EQUIPOS_POR_ACTIVIDAD = {
+  agricola: ['acoplado', 'acoplado_escalable', 'tolva', 'tolva_escalable', 'batea'],
+  ganadero: ['jaula', 'jaula_doble'],
+  granel:   ['batea', 'acoplado', 'acoplado_escalable', 'tolva', 'tolva_escalable'],
+}
+
 // Documento que el productor adjunta en el paso 5
 export const DOCUMENTO_POR_TIPO = {
   agricola: { tipo:'cpe',    label:'CPE',          ayuda:'según la CPE emitida en ARCA' },

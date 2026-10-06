@@ -56,7 +56,7 @@ export default function Roles() {
 
       {roles.includes('admin') && (
         <div
-          onClick={() => { setRol('admin'); navigate('/admin/dashboard') }}
+          onClick={() => { setRol('admin'); navigate('/admin') }}
           className="bg-white border-[1.5px] border-gray-200 rounded-[14px] p-4 mb-3 cursor-pointer
             hover:border-yellow-500 hover:bg-yellow-50 transition-all flex items-center gap-3.5"
         >

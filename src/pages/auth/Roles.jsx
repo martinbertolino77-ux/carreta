@@ -54,6 +54,23 @@ export default function Roles() {
         </div>
       )}
 
+      {roles.includes('admin') && (
+        <div
+          onClick={() => { setRol('admin'); navigate('/admin/dashboard') }}
+          className="bg-white border-[1.5px] border-gray-200 rounded-[14px] p-4 mb-3 cursor-pointer
+            hover:border-yellow-500 hover:bg-yellow-50 transition-all flex items-center gap-3.5"
+        >
+          <div className="w-12 h-12 bg-yellow-50 rounded-xl flex items-center justify-center text-2xl flex-shrink-0">🛡️</div>
+          <div className="flex-1">
+            <div className="text-base font-bold text-gray-900">Administrador</div>
+            <div className="text-xs text-gray-500 mt-0.5">Gestioná usuarios, pedidos y configuración</div>
+          </div>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2">
+            <path d="M9 18l6-6-6-6"/>
+          </svg>
+        </div>
+      )}
+
       <div className="mt-auto pt-8 text-center">
         <button onClick={signOut} className="text-xs text-gray-400 hover:text-gray-600">
           Cerrar sesión

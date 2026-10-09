@@ -108,8 +108,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || 'Carreta', {
       body: data.body || 'Nueva actividad en Carreta',
-      icon: '/icons/manifest-icon-192.maskable.png',
-      badge: '/icons/manifest-icon-192.maskable.png',
+      icon: '/icons/manifest-icon-192-maskable.png',
+      badge: '/icons/manifest-icon-192-maskable.png',
       data: { url: data.url || '/' },
       vibrate: [200, 100, 200],
     })

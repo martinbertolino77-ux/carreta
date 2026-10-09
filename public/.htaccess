@@ -13,6 +13,9 @@ RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
+# Un archivo de /assets/ que no existe es un 404 real (no devolver index.html como si fuera JS)
+RewriteRule ^assets/ - [R=404,L]
+
 # Todo lo demás (/nueva-password, /login, /productor/...) → index.html
 RewriteRule ^ index.html [L]
 

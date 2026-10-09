@@ -1,22 +1,34 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import HCaptcha from '@hcaptcha/react-hcaptcha'
+
+const HCAPTCHA_SITE_KEY = '06e4ad0e-ff76-469c-a496-0c929448e82e'
 
 export default function OlvidePassword() {
   const [email, setEmail]     = useState('')
   const [enviado, setEnviado] = useState(false)
   const [error, setError]     = useState('')
   const [loading, setLoading] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState(null)
+  const captchaRef = useRef(null)
 
   const doReset = async (e) => {
     e.preventDefault()
-    if (!email) { setError('Ingresá tu email'); return }
+    if (!email)        { setError('Ingresá tu email'); return }
+    if (!captchaToken) { setError('Completá el captcha'); return }
     setLoading(true); setError('')
     const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/nueva-password`,
+      redirectTo: 'https://carreta.com.ar/nueva-password',
+      captchaToken,
     })
-    if (err) setError('No pudimos enviar el email. Verificá que esté registrado.')
-    else setEnviado(true)
+    if (err) {
+      setError('No pudimos enviar el email. Intentá de nuevo.')
+      captchaRef.current?.resetCaptcha()
+      setCaptchaToken(null)
+    } else {
+      setEnviado(true)
+    }
     setLoading(false)
   }
 
@@ -45,10 +57,20 @@ export default function OlvidePassword() {
                 className="w-full border border-gray-200 rounded-[10px] px-3 py-2.5 text-sm mb-3 bg-gray-50
                   focus:outline-none focus:border-verde-600 font-[Inter]"
               />
+
+              <div className="flex justify-center mb-3">
+                <HCaptcha
+                  sitekey={HCAPTCHA_SITE_KEY}
+                  onVerify={token => setCaptchaToken(token)}
+                  onExpire={() => setCaptchaToken(null)}
+                  ref={captchaRef}
+                />
+              </div>
+
               {error && <p className="text-xs text-red-600 mb-3">{error}</p>}
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || !captchaToken}
                 className="w-full bg-verde-700 text-white rounded-[10px] py-2.5 text-sm font-bold
                   hover:bg-verde-800 transition-colors disabled:opacity-60 mb-3"
               >

@@ -1,5 +1,5 @@
-const STATIC_CACHE = 'carreta-static-v3';
-const DYNAMIC_CACHE = 'carreta-dynamic-v3';
+const STATIC_CACHE = 'carreta-static-v4';
+const DYNAMIC_CACHE = 'carreta-dynamic-v4';
 
 const WB_MANIFEST = self.__WB_MANIFEST || [];
 
@@ -12,7 +12,8 @@ self.addEventListener('install', (event) => {
         '/manifest.json',
         ...WB_MANIFEST.map((entry) => entry.url)
       ])]
-      return cache.addAll(urls)
+      // Ignorar errores individuales
+      return Promise.allSettled(urls.map(url => cache.add(url).catch(() => {})))
     })
   );
   self.skipWaiting();

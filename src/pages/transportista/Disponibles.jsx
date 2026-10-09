@@ -43,6 +43,7 @@ export default function Disponibles() {
   const [verVecinas, setVerVecinas] = useState(false)
   const [guardadas, setGuardadas] = useState([])      // búsquedas fijas del transportista
   const [miTranspId, setMiTranspId] = useState(null)
+  const [sumarAZona, setSumarAZona] = useState(true)   // al guardar: ¿también amplía Mi zona?
   const setB = (k, v) => setBusq(b => ({ ...b, [k]: v }))
 
   useEffect(() => { cargar() }, [])
@@ -83,10 +84,13 @@ export default function Disponibles() {
   const guardarBusqueda = () => {
     const l = busq.lugar
     if (!l) return
-    const nueva = { localidad: l.localidad, departamento: l.departamento, provincia: l.provincia, vecinas: vecinasSel }
+    const nueva = { localidad: l.localidad, departamento: l.departamento, provincia: l.provincia, vecinas: vecinasSel, zona: sumarAZona }
     const resto = guardadas.filter(g => !(normalizar(g.localidad) === normalizar(l.localidad) && mismaProvincia(g.provincia, l.provincia)))
     guardarGuardadas([nueva, ...resto].slice(0, 6))
   }
+
+  const toggleZona = (g) =>
+    guardarGuardadas(guardadas.map(x => x === g ? { ...x, zona: !x.zona } : x))
 
   const quitarBusqueda = (g) =>
     guardarGuardadas(guardadas.filter(x => x !== g))
@@ -162,6 +166,16 @@ export default function Disponibles() {
     return (p.localidades_vecinas || []).some(v => normalizar(v) === mia)
   }
 
+  // Zona ampliada: búsquedas fijas marcadas "en mi zona" (localidad + vecinas elegidas)
+  const zonaExtra = guardadas.filter(g => g.zona)
+  const enZonaExtra = (p) => {
+    const est = p.establecimientos || {}
+    const loc = normalizar(est.localidad)
+    return zonaExtra.some(g => mismaProvincia(g.provincia, est.provincia) &&
+      (normalizar(g.localidad) === loc || (g.vecinas || []).some(v => normalizar(v) === loc)))
+  }
+  const enMiZonaAmpliada = (p) => enMiZona(p) || enZonaExtra(p)
+
   const pasaFiltros = (p) => {
     if (busq.tipo !== 'todos' && p.tipo_actividad !== busq.tipo) return false
     if (busq.cereal && p.tipo_cereal !== busq.cereal) return false
@@ -205,7 +219,7 @@ export default function Disponibles() {
     setBuscando(false)
   }
 
-  const lista = tab === 'zona' ? pedidos.filter(enMiZona) : (resultado || [])
+  const lista = tab === 'zona' ? pedidos.filter(enMiZonaAmpliada) : (resultado || [])
 
   const Tarjeta = ({ p }) => (
     <Card onClick={() => navigate(`/transportista/disponible/${p.id}`)}>
@@ -235,6 +249,7 @@ export default function Disponibles() {
             <Badge color="gray">📅 {formatFecha(p.fecha_entrega)}</Badge>
             {p.modo_publicacion === 'directo' && <Badge color="blue">🎯 Directo</Badge>}
             {tab === 'buscar' && !enMiZona(p) && <Badge color="orange">Fuera de zona</Badge>}
+            {tab === 'zona' && !enMiZona(p) && enZonaExtra(p) && <Badge color="blue">Zona ampliada</Badge>}
           </div>
         </div>
         <span className="text-gray-300 text-lg flex-shrink-0 mt-1">›</span>
@@ -262,7 +277,9 @@ export default function Disponibles() {
         {tab === 'zona' && (
           baseLoc ? (
             <div className="text-xs text-gray-500 mb-3">
-              Pedidos que cargan en <b>{baseLoc}</b> o que el productor extendió a tu localidad.
+              Pedidos que cargan en <b>{baseLoc}</b> o que el productor extendió a tu localidad
+              {zonaExtra.length > 0 && <>, más tu zona ampliada: <b>{zonaExtra.map(g => g.localidad + (g.vecinas?.length ? ` +${g.vecinas.length}` : '')).join(', ')}</b></>}.
+              {zonaExtra.length === 0 && <> Podés ampliarla desde Buscar → ☆ Dejar fija.</>}
             </div>
           ) : (
             <Banner color="orange" title="Falta tu localidad base" className="mb-3">
@@ -289,12 +306,15 @@ export default function Disponibles() {
 
             {guardadas.length > 0 && (
               <div className="mb-3">
-                <div className="text-[11px] font-semibold text-azul-600 mb-1">⭐ Mis búsquedas fijas</div>
+                <div className="text-[11px] font-semibold text-azul-600 mb-1">⭐ Mis búsquedas fijas <span className="font-normal text-gray-400">· 🔔 = en Mi zona, con avisos</span></div>
                 <div className="flex gap-2 flex-wrap">
                   {guardadas.map((g, i) => (
                     <span key={i} className="inline-flex items-center rounded-full border border-azul-200 bg-azul-50 text-azul-700 text-xs font-medium">
                       <button onClick={() => usarGuardada(g)} className="pl-3 pr-1 py-1.5">
                         📍 {g.localidad}{g.vecinas?.length ? ` +${g.vecinas.length}` : ''}
+                      </button>
+                      <button onClick={() => toggleZona(g)} className="px-1 py-1.5" title={g.zona ? 'En Mi zona: te avisamos los pedidos nuevos' : 'Fuera de Mi zona: sin avisos'}>
+                        {g.zona ? '🔔' : '🔕'}
                       </button>
                       <button onClick={() => quitarBusqueda(g)} className="pr-2.5 pl-1 py-1.5 text-azul-400" title="Quitar">✕</button>
                     </span>
@@ -340,7 +360,13 @@ export default function Disponibles() {
                     )}
                   </div>
                 )}
-                <div className="px-3 pb-2">
+                <div className="px-3 pb-2 flex items-center gap-3 flex-wrap">
+                  {!yaGuardada && (
+                    <label className="flex items-center gap-1.5 text-[11px] text-gray-600">
+                      <input type="checkbox" checked={sumarAZona} onChange={e => setSumarAZona(e.target.checked)} />
+                      Sumar a Mi zona y avisarme
+                    </label>
+                  )}
                   <button type="button" onClick={guardarBusqueda} disabled={yaGuardada}
                     className="text-[11px] font-semibold text-azul-600 disabled:text-gray-400">
                     {yaGuardada ? '⭐ Guardada como búsqueda fija' : '☆ Dejar fija para próximas búsquedas'}

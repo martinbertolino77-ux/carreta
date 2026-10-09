@@ -111,7 +111,7 @@ export default function DetallePedido() {
 
       setModalDoc(false)
       setArchivoDoc(null)
-      await cargar()
+      await cargar(true)
     } catch (e) {
       alert(e.message)
     } finally {
@@ -239,14 +239,14 @@ export default function DetallePedido() {
     setSavingAcuerdo(false)
     if (error) { setErrAcuerdo(error.message); return }
     setAceptando(null)
-    await cargar()
+    await cargar(true)
   }
 
   const cerrarCupo = async () => {
     if (!confirm('¿Cerrar cupo con los camiones aceptados hasta ahora? Las demás ofertas quedan en pausa.')) return
     const { error } = await supabase.rpc('cerrar_cupo', { p_pedido_id: id })
     if (error) { alert(error.message); return }
-    await cargar()
+    await cargar(true)
   }
 
   // Paso 7: productor confirma descarga de un transportista → su viaje Finalizado
@@ -257,7 +257,7 @@ export default function DetallePedido() {
     const { error } = await supabase.rpc('confirmar_descarga_transportista', { p_oferta_id: ofertaId })
     setConfirmando(false)
     if (error) { alert(error.message); return }
-    await cargar()
+    await cargar(true)
   }
 
   if (loading) return (
@@ -502,7 +502,7 @@ export default function DetallePedido() {
                       <Button size="sm" variant="ghost" full={false}
                         onClick={async () => {
                           await supabase.from('ofertas').update({ estado: 'rechazada' }).eq('id', o.id)
-                          await cargar()
+                          await cargar(true)
                         }}>
                         Rechazar
                       </Button>
@@ -689,7 +689,7 @@ export default function DetallePedido() {
             <Button variant="danger" onClick={async () => {
               if (!confirm('¿Retirás el pedido? El transportista recibirá un aviso.')) return
               const { error } = await supabase.rpc('retirar_pedido_directo', { p_pedido_id: id })
-              if (error) alert(error.message); else await cargar()
+              if (error) alert(error.message); else await cargar(true)
             }}>
               Retirar pedido
             </Button>
@@ -713,7 +713,7 @@ export default function DetallePedido() {
               <Button variant="secondary" full={false} onClick={async () => {
                 if (!confirm('¿Publicás este pedido a todos los transportistas de tu zona?')) return
                 const { error } = await supabase.rpc('publicar_a_zona', { p_pedido_id: id })
-                if (error) alert(error.message); else await cargar()
+                if (error) alert(error.message); else await cargar(true)
               }}>
                 📢 Publicar a la zona
               </Button>
@@ -743,7 +743,7 @@ export default function DetallePedido() {
         onClose={() => setModalCancelar(false)}
         pedidoId={id}
         rol="productor"
-        onCancelado={async () => { setModalCancelar(false); await cargar() }}
+        onCancelado={async () => { setModalCancelar(false); await cargar(true) }}
       />
 
       {/* Modal elegir transportista con condiciones acordadas */}
@@ -801,7 +801,7 @@ export default function DetallePedido() {
         rol="productor"
         pedidoNumero={pedido?.numero}
         obligatorio
-        onCalificado={() => { setModalCalif(null); cargar() }}
+        onCalificado={() => { setModalCalif(null); cargar(true) }}
       />
 
       {/* Modal kilos / doc */}

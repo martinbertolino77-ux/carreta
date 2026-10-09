@@ -207,7 +207,7 @@ export default function DetallePedidoTransp() {
     if (!confirm('¿Quitar este camión del viaje?')) return
     const { error } = await supabase.from('camiones_viaje').delete().eq('id', cvId)
     if (error) { alert(error.message); return }
-    await cargar()
+    await cargar(true)
   }
 
   // Motivo por el que una opción no se puede elegir
@@ -266,8 +266,8 @@ export default function DetallePedidoTransp() {
       if (rpcErr) throw rpcErr
 
       setModalDatosOp(false)
-      await cargar()
-    } catch (e) { setError(e.message); await cargar() }
+      await cargar(true)
+    } catch (e) { setError(e.message); await cargar(true) }
     finally { setSaving(false) }
   }
 
@@ -302,7 +302,7 @@ export default function DetallePedidoTransp() {
     const { data: pend } = await supabase.from('camiones_viaje').select('id')
       .in('datos_operativos_id', doIds).is('fecha_descarga', null)
     if (!pend?.length) setModalMonto(true)
-    else await cargar()
+    else await cargar(true)
   }
 
   if (loading) return (
@@ -464,7 +464,7 @@ export default function DetallePedidoTransp() {
               <Button variant="azul" className="mb-3" onClick={async () => {
                 const { error } = await supabase.rpc('marcar_datos_enviados', { p_pedido_id: id })
                 if (error) alert(error.message)
-                await cargar()
+                await cargar(true)
               }}>
                 📋 Reenviar datos operativos
               </Button>
@@ -655,7 +655,7 @@ export default function DetallePedidoTransp() {
         rol="transportista"
         pedidoNumero={pedido?.numero}
         obligatorio
-        onCalificado={() => { setModalCalif(false); setYaCalifique(true); cargar() }}
+        onCalificado={() => { setModalCalif(false); setYaCalifique(true); cargar(true) }}
       />
 
       <ModalCancelar
@@ -667,7 +667,7 @@ export default function DetallePedidoTransp() {
       />
 
       {/* Modal monto final */}
-      <Modal open={modalMonto} onClose={() => { setModalMonto(false); cargar() }} title="Monto final del viaje">
+      <Modal open={modalMonto} onClose={() => { setModalMonto(false); cargar(true) }} title="Monto final del viaje">
         <div className="text-xs text-gray-500 mb-3">Monto final acordado con el productor. Podés omitirlo y cargarlo después.</div>
         <Field label="Monto final ($)">
           <Input type="number" placeholder="Ej: 450000" value={montoFinal}
@@ -677,7 +677,7 @@ export default function DetallePedidoTransp() {
           if (miOferta?.id && montoFinal) {
             await supabase.from('ofertas').update({ monto_final: Number(montoFinal) }).eq('id', miOferta.id)
           }
-          setModalMonto(false); await cargar()
+          setModalMonto(false); await cargar(true)
         }}>
           {montoFinal ? 'Guardar monto' : 'Omitir por ahora'}
         </Button>
@@ -773,7 +773,7 @@ export default function DetallePedidoTransp() {
           setSavingInc(false)
           if (error) { alert(error.message); return }
           setModalIncidencia(null)
-          await cargar()
+          await cargar(true)
         }} disabled={savingInc}>
           Enviar incidencia
         </Button>

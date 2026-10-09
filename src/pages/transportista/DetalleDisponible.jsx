@@ -68,7 +68,7 @@ export default function DetalleDisponible() {
     if (!confirm('¿Retirar tu oferta de este pedido?')) return
     const { error } = await supabase.rpc('retirar_oferta', { p_oferta_id: miOferta.id })
     if (error) { alert(error.message); return }
-    await cargar()
+    await cargar(true)
   }
 
   const enviarOferta = async () => {
@@ -93,7 +93,7 @@ export default function DetalleDisponible() {
       // El estado del pedido y el aviso al productor los resuelve la base (trigger de nueva oferta)
 
       setModalOfertar(false)
-      await cargar()
+      await cargar(true)
     } catch (e) { setError(e.message) }
     finally { setSaving(false) }
   }

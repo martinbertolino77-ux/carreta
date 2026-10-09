@@ -43,7 +43,8 @@ export default function Disponibles() {
   const [verVecinas, setVerVecinas] = useState(false)
   const [guardadas, setGuardadas] = useState([])      // búsquedas fijas del transportista
   const [miTranspId, setMiTranspId] = useState(null)
-  const [sumarAZona, setSumarAZona] = useState(true)   // al guardar: ¿también amplía Mi zona?
+  const [sumarAZona, setSumarAZona] = useState(true)
+  const [textoLugar, setTextoLugar] = useState('')     // lo que va escribiendo (no se borra al tipear)   // al guardar: ¿también amplía Mi zona?
   const setB = (k, v) => setBusq(b => ({ ...b, [k]: v }))
 
   useEffect(() => { cargar() }, [])
@@ -324,9 +325,9 @@ export default function Disponibles() {
             )}
 
             <Field label="¿Dónde querés cargar?" hint="Ej: donde vas a descargar, para volver cargado">
-              <LocalidadInput value={busq.lugar?.localidad || ''} placeholder="Ej: Rosario"
-                onChange={() => { setB('lugar', null); setVecinasDisp([]); setVecinasSel([]) }}
-                onSelect={o => elegirLugar(o)} />
+              <LocalidadInput value={busq.lugar?.localidad ?? textoLugar} placeholder="Escribí 3 letras, ej: Rosario"
+                onChange={t => { setTextoLugar(t); if (busq.lugar) { setB('lugar', null); setVecinasDisp([]); setVecinasSel([]) } }}
+                onSelect={o => { setTextoLugar(o.localidad); elegirLugar(o) }} />
             </Field>
 
             {busq.lugar && (

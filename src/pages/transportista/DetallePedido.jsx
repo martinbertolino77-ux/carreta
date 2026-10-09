@@ -70,15 +70,15 @@ export default function DetallePedidoTransp() {
   useEffect(() => {
     if (!id) return
     const canal = supabase.channel(`detalle-transp-${id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos', filter: `id=eq.${id}` }, () => cargar())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ofertas', filter: `pedido_id=eq.${id}` }, () => cargar())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'camiones_viaje' }, () => cargar())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos', filter: `id=eq.${id}` }, () => cargar(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ofertas', filter: `pedido_id=eq.${id}` }, () => cargar(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'camiones_viaje' }, () => cargar(true))
       .subscribe()
     return () => supabase.removeChannel(canal)
   }, [id])
 
-  async function cargar() {
-    setLoading(true)
+  async function cargar(silencioso = false) {
+    if (!silencioso) setLoading(true)
 
     const t = await getMiTransportista()
     setTransportista(t)

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAutoRefresh } from '../../hooks/useAutoRefresh'
 import { supabase, getMiTransportista } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import Shell, { Body } from '../../components/layout/Shell'
@@ -42,8 +43,10 @@ export default function Disponibles() {
 
   useEffect(() => { cargar() }, [])
 
-  async function cargar() {
-    setLoading(true)
+  useAutoRefresh(cargar, 30000)
+
+  async function cargar(silencioso = false) {
+    if (!silencioso) setLoading(true)
     const t = await getMiTransportista()
 
     let query = supabase

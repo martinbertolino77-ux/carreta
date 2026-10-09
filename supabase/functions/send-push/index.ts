@@ -1,102 +1,81 @@
+// send-push: la llama la base de datos (trigger en notificaciones) con un secreto.
+// Manda el push a los navegadores del destinatario de la notificación.
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-// 🔒 CORS restringido solo a tu dominio
-const ALLOWED_ORIGIN = 'https://carreta-roan.vercel.app'
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+// Adónde lleva el click en el aviso
+function urlDestino(n: { tipo: string; rol: string | null; pedido_id: string | null }) {
+  if (!n.pedido_id) return '/'
+  if (n.rol === 'productor') return `/productor/pedido/${n.pedido_id}`
+  if (n.tipo === 'pedido_nuevo') return `/transportista/disponible/${n.pedido_id}`
+  if (n.tipo.includes('directo')) return `/transportista/pedido-directo/${n.pedido_id}`
+  return `/transportista/pedido/${n.pedido_id}`
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method !== 'POST') return json({ error: 'Método no permitido' }, 405)
 
-  // 🔒 Verificar origen
-  const origin = req.headers.get('origin') || ''
-  if (origin !== ALLOWED_ORIGIN) {
-    return new Response(JSON.stringify({ error: 'Origen no permitido' }), {
-      status: 403,
-      headers: { 'Content-Type': 'application/json' }
-    })
-  }
-
-  // 🔒 Verificar JWT — el token viene del cliente autenticado
-  const authHeader = req.headers.get('authorization')
-  if (!authHeader) {
-    return new Response(JSON.stringify({ error: 'No autorizado' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' }
-    })
+  // 🔒 Solo la base de datos conoce este secreto
+  const secreto = Deno.env.get('PUSH_SECRET')
+  if (!secreto || req.headers.get('x-push-secret') !== secreto) {
+    return json({ error: 'No autorizado' }, 401)
   }
 
   try {
-    const { usuario_id, titulo, cuerpo, url } = await req.json()
-
-    // Validar campos requeridos
-    if (!usuario_id || !titulo || !cuerpo) {
-      return new Response(JSON.stringify({ error: 'Faltan campos requeridos' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
-    }
+    const { notificacion_id } = await req.json()
+    if (!notificacion_id) return json({ error: 'Falta notificacion_id' }, 400)
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    // 🔒 Verificar que el JWT pertenece al usuario_id recibido
-    const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-    if (authError || !user || user.id !== usuario_id) {
-      return new Response(JSON.stringify({ error: 'Token inválido' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
-    }
+    const { data: n } = await supabase
+      .from('notificaciones')
+      .select('id, usuario_id, tipo, titulo, mensaje, pedido_id, rol')
+      .eq('id', notificacion_id)
+      .maybeSingle()
+    if (!n?.usuario_id) return json({ ok: true, enviadas: 0 })
 
     const { data: subs } = await supabase
       .from('push_subscriptions')
       .select('*')
-      .eq('usuario_id', usuario_id)
-
-    if (!subs || subs.length === 0) {
-      return new Response(JSON.stringify({ ok: true, enviadas: 0 }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
-    }
-
-    const VAPID_PUBLIC  = Deno.env.get('VAPID_PUBLIC_KEY')!
-    const VAPID_PRIVATE = Deno.env.get('VAPID_PRIVATE_KEY')!
+      .eq('usuario_id', n.usuario_id)
+    if (!subs?.length) return json({ ok: true, enviadas: 0 })
 
     const webpush = await import('https://esm.sh/web-push@3.6.7')
-    webpush.setVapidDetails('mailto:admin@carreta.app', VAPID_PUBLIC, VAPID_PRIVATE)
+    webpush.setVapidDetails(
+      'mailto:soporte@carreta.com.ar',
+      Deno.env.get('VAPID_PUBLIC_KEY')!,
+      Deno.env.get('VAPID_PRIVATE_KEY')!,
+    )
+
+    const payload = JSON.stringify({
+      title: n.titulo || 'Carreta',
+      body: n.mensaje || '',
+      url: urlDestino(n),
+    })
 
     let enviadas = 0
     for (const sub of subs) {
       try {
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          JSON.stringify({ title: titulo, body: cuerpo, url: url || '/' })
+          payload,
         )
         enviadas++
       } catch (err) {
-        if (err.statusCode === 410) {
+        // Navegador dado de baja → se borra la suscripción
+        if (err?.statusCode === 404 || err?.statusCode === 410) {
           await supabase.from('push_subscriptions').delete().eq('id', sub.id)
         }
       }
     }
-
-    return new Response(JSON.stringify({ ok: true, enviadas }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
-
+    return json({ ok: true, enviadas })
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
+    return json({ error: String(err?.message || err) }, 500)
   }
 })

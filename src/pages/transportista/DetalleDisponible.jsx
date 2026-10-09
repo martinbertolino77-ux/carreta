@@ -39,8 +39,8 @@ export default function DetalleDisponible() {
 
   useEffect(() => { cargar() }, [id])
 
-  async function cargar() {
-    setLoading(true)
+  async function cargar(silencioso = false) {
+    if (!silencioso) setLoading(true)
     const { data: p } = await supabase
       .from('pedidos')
       .select(`*, establecimientos(nombre, localidad, provincia, departamento, link_maps, lat, lng), productores(id, usuario_id, usuarios(nombre, apellido, razon_social))`)
@@ -90,21 +90,7 @@ export default function DetalleDisponible() {
         observaciones: form.observaciones || null,
       })
       if (insErr) throw insErr
-      await supabase.from('pedidos').update({ estado: 'con_ofertas' }).eq('id', id)
-
-      // Notificar al productor
-      if (pedido?.productores?.usuario_id) {
-        console.log('[Push] transportista data:', JSON.stringify(t))
-        const nombreTransp = t.usuarios?.razon_social || `${t.usuarios?.nombre || ''} ${t.usuarios?.apellido || ''}`.trim() || 'Un transportista'
-        supabase.functions.invoke('send-push', {
-          body: {
-            usuario_id: pedido.productores.usuario_id,
-            titulo: '🚛 Nueva oferta recibida',
-            cuerpo: `${nombreTransp} se postuló para el pedido ${formatNroPedido(pedido.numero)}`,
-            url: `/productor/pedido/${id}`,
-          }
-        }).catch(err => console.warn('[Push] Error enviando notificacion:', err))
-      }
+      // El estado del pedido y el aviso al productor los resuelve la base (trigger de nueva oferta)
 
       setModalOfertar(false)
       await cargar()

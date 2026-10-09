@@ -20,13 +20,7 @@
     <script type="module" src="/src/main.jsx"></script>
     <script>
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', async () => {
-          // Desregistrar todos los SW viejos
-          const regs = await navigator.serviceWorker.getRegistrations()
-          for (const reg of regs) {
-            await reg.unregister()
-          }
-          // Registrar el nuevo
+        window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js')
         })
       }

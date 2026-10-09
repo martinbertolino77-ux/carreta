@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAutoRefresh } from '../../hooks/useAutoRefresh'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import Shell, { Body } from '../../components/layout/Shell'
@@ -25,8 +26,10 @@ export default function MisPedidos() {
     cargar()
   }, [usuario])
 
-  async function cargar() {
-    setLoading(true)
+  useAutoRefresh(cargar, 30000, !!usuario)
+
+  async function cargar(silencioso = false) {
+    if (!silencioso) setLoading(true)
     // Solo pedidos de ESTE productor (el usuario puede tener también rol transportista)
     const { data: prod } = await supabase
       .from('productores').select('id').eq('usuario_id', usuario.id).maybeSingle()

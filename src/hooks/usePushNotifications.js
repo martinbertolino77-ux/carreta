@@ -40,16 +40,27 @@ async function suscribir(usuarioId) {
     const json = sub.toJSON()
     console.log('[Push] Suscripcion OK:', json.endpoint?.slice(0, 30) + '...')
 
-    await supabase.from('push_subscriptions').upsert({
-      usuario_id: usuarioId,
-      endpoint: json.endpoint,
-      p256dh: json.keys.p256dh,
-      auth: json.keys.auth,
-    }, { onConflict: 'usuario_id,endpoint' })
+    // Este navegador queda anotado solo a nombre del usuario actual
+    const { error } = await supabase.rpc('registrar_push', {
+      p_endpoint: json.endpoint, p_p256dh: json.keys.p256dh, p_auth: json.keys.auth,
+    })
+    if (error) throw error
 
     console.log('[Push] Guardado en Supabase OK')
 
   } catch (err) {
     console.error('[Push] Error:', err)
+  }
+}
+
+// Al cerrar sesión: este navegador deja de recibir avisos de ese usuario
+export async function quitarPushDeEsteNavegador() {
+  try {
+    if (!('serviceWorker' in navigator)) return
+    const reg = await navigator.serviceWorker.getRegistration()
+    const sub = await reg?.pushManager?.getSubscription()
+    if (sub) await supabase.rpc('quitar_push', { p_endpoint: sub.endpoint })
+  } catch (err) {
+    console.warn('[Push] No se pudo quitar la suscripción:', err)
   }
 }

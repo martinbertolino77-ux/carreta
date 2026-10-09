@@ -57,9 +57,9 @@ export default function DetallePedido() {
   useEffect(() => {
     const channel = supabase
       .channel(`detalle-prod-${id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ofertas', filter: `pedido_id=eq.${id}` }, () => cargar())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos', filter: `id=eq.${id}` }, () => cargar())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'camiones_viaje' }, () => cargar())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ofertas', filter: `pedido_id=eq.${id}` }, () => cargar(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos', filter: `id=eq.${id}` }, () => cargar(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'camiones_viaje' }, () => cargar(true))
       .subscribe()
     return () => supabase.removeChannel(channel)
   }, [id])
@@ -119,8 +119,8 @@ export default function DetallePedido() {
     }
   }
 
-  async function cargar() {
-    setLoading(true)
+  async function cargar(silencioso = false) {
+    if (!silencioso) setLoading(true)
     const { data: p } = await supabase
       .from('pedidos')
       .select(`

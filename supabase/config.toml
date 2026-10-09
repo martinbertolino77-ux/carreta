@@ -1,6 +1,6 @@
 [functions.send-push]
 enabled = true
-verify_jwt = true
+verify_jwt = false
 import_map = "./functions/send-push/deno.json"
 entrypoint = "./functions/send-push/index.ts"
 

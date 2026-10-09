@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import { usePushNotifications } from '../hooks/usePushNotifications'
+import { usePushNotifications, quitarPushDeEsteNavegador } from '../hooks/usePushNotifications'
 
 const AuthContext = createContext(null)
 
@@ -19,6 +19,7 @@ export function AuthProvider({ children }) {
   const timerRef                = useRef(null)
 
   const signOut = useCallback(async () => {
+    await quitarPushDeEsteNavegador()
     await supabase.auth.signOut()
     setRol(null)
     setUsuario(null)

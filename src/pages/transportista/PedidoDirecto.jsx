@@ -30,8 +30,8 @@ export default function PedidoDirecto() {
 
   useEffect(() => { cargar() }, [id])
 
-  async function cargar() {
-    setLoading(true)
+  async function cargar(silencioso = false) {
+    if (!silencioso) setLoading(true)
     const { data: p } = await supabase.from('pedidos').select(`
       *, establecimientos(nombre, localidad, provincia, link_maps, telefono, lat, lng),
       productores(usuario_id, usuarios(nombre, apellido, razon_social, telefono))
@@ -44,17 +44,8 @@ export default function PedidoDirecto() {
     setLoading(false)
   }
 
-  const notificarProductor = (titulo, cuerpo) => {
-    if (!pedido?.productores?.usuario_id) return
-    supabase.functions.invoke('send-push', {
-      body: {
-        usuario_id: pedido.productores.usuario_id,
-        titulo,
-        cuerpo,
-        url: `/productor/pedido/${id}`,
-      }
-    }).catch(err => console.warn('[Push] Error:', err))
-  }
+  // El aviso al productor lo manda la base (notificación + push)
+  const notificarProductor = () => {}
 
   const aceptar = async () => {
     setSaving(true)

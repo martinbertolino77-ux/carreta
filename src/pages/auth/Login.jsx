@@ -25,7 +25,12 @@ export default function Login() {
       options: { captchaToken }
     })
     if (err) {
-      setError('Email o contraseña incorrectos')
+      console.error('[Login]', err.status, err.code, err.message)
+      const m = (err.message || '').toLowerCase()
+      if (m.includes('invalid login credentials'))  setError('Email o contraseña incorrectos')
+      else if (m.includes('email not confirmed'))   setError('Todavía no confirmaste tu email. Revisá tu correo.')
+      else if (m.includes('captcha'))               setError('Falló el captcha. Probá de nuevo.')
+      else setError(`No se pudo ingresar: ${err.message}`)
       captchaRef.current?.resetCaptcha()
       setCaptchaToken(null)
     } else {

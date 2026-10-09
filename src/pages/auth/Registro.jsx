@@ -59,10 +59,20 @@ export default function Registro() {
     return null
   }
 
-  const siguiente = () => {
+  const cuitDisponible = async () => {
+    const { data, error } = await supabase.rpc('cuit_disponible', { p_cuit: limpiarCuit(form.cuit) })
+    if (error) { console.error('[cuit_disponible]', error); return true } // si falla el chequeo, no bloquear
+    return data === true
+  }
+
+  const siguiente = async () => {
     setError('')
     if (step === 1) { const e = validarStep1(); if (e) { setError(e); return }; setStep(2) }
-    else if (step === 2) { const e = validarStep2(); if (e) { setError(e); return }; setStep(3) }
+    else if (step === 2) {
+      const e = validarStep2(); if (e) { setError(e); return }
+      if (!(await cuitDisponible())) { setError('Ese CUIT ya está registrado. Si es tuyo, ingresá con tu cuenta o recuperá la contraseña.'); return }
+      setStep(3)
+    }
     else if (step === 3) { const e = validarStep3(); if (e) { setError(e); return }; setStep(4) }
   }
 
@@ -96,7 +106,9 @@ export default function Registro() {
 
       setRegistrado(true)
     } catch (e) {
-      setError(e.message)
+      setError(e.message?.toLowerCase().includes('already registered')
+        ? 'Ese email ya está registrado. Ingresá o recuperá la contraseña.'
+        : e.message)
     } finally {
       setLoading(false)
     }

@@ -9,13 +9,21 @@ export default function MapRuta({ origen, destino, origenLabel, destinoLabel }) 
   const [duracion, setDuracion] = useState('')
   const [error, setError] = useState('')
 
+  // Claves estables: si el pedido se recarga (tiempo real) con el mismo origen/destino,
+  // el mapa NO se vuelve a dibujar ni se recalcula la ruta.
+  const clave = (x) => !x ? '' : typeof x === 'string' ? x : `${x.lat},${x.lng}`
+  const oKey = clave(origen), dKey = clave(destino)
+
   useEffect(() => {
-    if (!origen || !destino) return
+    if (!oKey || !dKey) return
+    let vivo = true
     cargarGoogleMaps().then(() => {
+      if (!vivo) return
       setLoading(false)
-      setTimeout(() => initMap(), 100)
+      setTimeout(() => { if (vivo) initMap() }, 100)
     })
-  }, [origen, destino])
+    return () => { vivo = false }
+  }, [oKey, dKey])
 
   function initMap() {
     if (!mapRef.current) return

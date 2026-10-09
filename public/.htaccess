@@ -1,0 +1,24 @@
+# Carreta — SPA en Apache (DonWeb / Ferozo)
+Options -MultiViews
+RewriteEngine On
+RewriteBase /
+
+# Forzar HTTPS
+RewriteCond %{HTTPS} off
+RewriteCond %{HTTP:X-Forwarded-Proto} !https
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Archivos y carpetas reales se sirven tal cual
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Todo lo demás (/nueva-password, /login, /productor/...) → index.html
+RewriteRule ^ index.html [L]
+
+# No cachear index.html ni el service worker (si no, quedan versiones viejas)
+<IfModule mod_headers.c>
+  <FilesMatch "^(index\.html|sw\.js|manifest\.json)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+  </FilesMatch>
+</IfModule>

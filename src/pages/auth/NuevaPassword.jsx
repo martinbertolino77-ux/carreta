@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { supabase } from '../../lib/supabase'
+import { useNavigate, Link } from 'react-router-dom'
+import { supabase, linkRecuperacion } from '../../lib/supabase'
 
 export default function NuevaPassword() {
   const navigate = useNavigate()
@@ -9,15 +9,47 @@ export default function NuevaPassword() {
   const [error, setError]     = useState('')
   const [loading, setLoading] = useState(false)
   const [listo, setListo]     = useState(false)
-  const [sesionOk, setSesionOk] = useState(false)
+  // 'verificando' | 'confirmar' | 'ok' | 'invalido'
+  const [estado, setEstado]   = useState('verificando')
 
-  // Supabase maneja el token del link automáticamente vía onAuthStateChange
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') setSesionOk(true)
+    let vivo = true
+    const marcar = (e) => { if (vivo) setEstado(e) }
+
+    // 1) Error devuelto por Supabase (link vencido / ya usado)
+    if (linkRecuperacion.error) { marcar('invalido'); return }
+
+    // 2) Link nuevo con token_hash: pedir click (Outlook/Hotmail escanean
+    //    los links y gastan el token si se verifica solo al abrir)
+    if (linkRecuperacion.tokenHash) { marcar('confirmar'); return }
+
+    // 3) Link clásico (#access_token…type=recovery): el cliente ya procesó
+    //    la URL antes de montar esta página → revisar flag + sesión
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' && session) marcar('ok')
     })
-    return () => subscription.unsubscribe()
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session && linkRecuperacion.esRecovery) marcar('ok')
+    })
+    const t = setTimeout(() => {
+      setEstado(e => (e === 'verificando' ? 'invalido' : e))
+    }, 8000)
+
+    return () => { vivo = false; clearTimeout(t); subscription.unsubscribe() }
   }, [])
+
+  const confirmarLink = async () => {
+    setLoading(true); setError('')
+    const { error: err } = await supabase.auth.verifyOtp({
+      token_hash: linkRecuperacion.tokenHash,
+      type: 'recovery',
+    })
+    setLoading(false)
+    if (err) { setEstado('invalido'); return }
+    linkRecuperacion.esRecovery = true
+    window.history.replaceState(null, '', '/nueva-password')
+    setEstado('ok')
+  }
 
   const doUpdate = async (e) => {
     e.preventDefault()
@@ -26,17 +58,54 @@ export default function NuevaPassword() {
     if (pass !== pass2)   { setError('Las contraseñas no coinciden'); return }
     setLoading(true); setError('')
     const { error: err } = await supabase.auth.updateUser({ password: pass })
-    if (err) setError('No se pudo actualizar. Pedí un nuevo link.')
-    else { setListo(true); setTimeout(() => navigate('/login'), 2500) }
+    if (err) {
+      setError(err.message?.includes('different from the old')
+        ? 'La contraseña nueva debe ser distinta a la anterior.'
+        : 'No se pudo actualizar. Pedí un nuevo link.')
+      setLoading(false)
+      return
+    }
+    linkRecuperacion.esRecovery = false
+    await supabase.auth.signOut()
+    setListo(true)
     setLoading(false)
+    setTimeout(() => navigate('/login'), 2500)
   }
 
-  if (!sesionOk) return (
+  const Caja = ({ children }) => (
     <div className="min-h-screen bg-verde-800 flex items-center justify-center px-6">
-      <div className="bg-white rounded-2xl p-6 w-full max-w-sm text-center">
-        <p className="text-sm text-gray-500">Verificando link…</p>
-      </div>
+      <div className="bg-white rounded-2xl p-6 w-full max-w-sm text-center">{children}</div>
     </div>
+  )
+
+  if (estado === 'verificando') return (
+    <Caja><p className="text-sm text-gray-500">Verificando link…</p></Caja>
+  )
+
+  if (estado === 'confirmar') return (
+    <Caja>
+      <h1 className="text-base font-bold text-gray-900 mb-2">Recuperar contraseña</h1>
+      <p className="text-xs text-gray-500 mb-4">Tocá el botón para continuar y elegir tu nueva contraseña.</p>
+      <button
+        onClick={confirmarLink}
+        disabled={loading}
+        className="w-full bg-verde-700 text-white rounded-[10px] py-2.5 text-sm font-bold
+          hover:bg-verde-800 transition-colors disabled:opacity-60"
+      >
+        {loading ? 'Verificando…' : 'Continuar'}
+      </button>
+    </Caja>
+  )
+
+  if (estado === 'invalido') return (
+    <Caja>
+      <h1 className="text-base font-bold text-gray-900 mb-2">Link vencido o ya usado</h1>
+      <p className="text-xs text-gray-500 mb-4">Pedí un link nuevo. Usá siempre el último email que te llegó.</p>
+      <Link to="/olvide-password"
+        className="block w-full bg-verde-700 text-white rounded-[10px] py-2.5 text-sm font-bold hover:bg-verde-800">
+        Pedir nuevo link
+      </Link>
+    </Caja>
   )
 
   return (

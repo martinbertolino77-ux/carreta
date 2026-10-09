@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
@@ -799,7 +799,7 @@ export default function DetallePedido() {
         onClose={() => setModalCalif(null)}
         ofertaId={modalCalif?.ofertaId}
         rol="productor"
-        pedidoNumero={modalCalif?.numero}
+        pedidoNumero={pedido?.numero}
         obligatorio
         onCalificado={() => { setModalCalif(null); cargar() }}
       />

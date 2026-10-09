@@ -20,7 +20,6 @@ import { normalizar, mismaProvincia, localidadesDelDepartamento, buscarLocalidad
 
 const INIT_BUSQ = {
   lugar: null,             // { localidad, departamento, provincia }
-  vecinas: true,
   tipo: 'todos',
   cereal: '',
   categoria: '',
@@ -39,9 +38,69 @@ export default function Disponibles() {
   const [resultado, setResultado] = useState(null) // null = sin buscar todavía
   const [buscando, setBuscando] = useState(false)
   const [misDestinos, setMisDestinos] = useState([]) // destinos de mis viajes activos
+  const [vecinasDisp, setVecinasDisp] = useState([])  // localidades del mismo departamento
+  const [vecinasSel, setVecinasSel] = useState([])    // tildadas por el transportista
+  const [verVecinas, setVerVecinas] = useState(false)
+  const [guardadas, setGuardadas] = useState([])      // búsquedas fijas del transportista
+  const [miTranspId, setMiTranspId] = useState(null)
   const setB = (k, v) => setBusq(b => ({ ...b, [k]: v }))
 
   useEffect(() => { cargar() }, [])
+
+  useEffect(() => {
+    getMiTransportista('id, busquedas_guardadas').then(t => {
+      if (!t) return
+      setMiTranspId(t.id)
+      setGuardadas(Array.isArray(t.busquedas_guardadas) ? t.busquedas_guardadas : [])
+    })
+  }, [])
+
+  // Al elegir la localidad: traer las vecinas (mismo departamento/partido) para tildar
+  async function elegirLugar(lugar, preseleccion = []) {
+    setB('lugar', lugar)
+    setVecinasDisp([]); setVecinasSel([])
+    if (!lugar) return []
+    const lista = (await localidadesDelDepartamento(lugar.provincia, lugar.departamento))
+      .filter(n => normalizar(n) !== normalizar(lugar.localidad))
+    setVecinasDisp(lista)
+    const set = new Set(preseleccion.map(normalizar))
+    const sel = lista.filter(n => set.has(normalizar(n)))
+    setVecinasSel(sel)
+    return sel
+  }
+
+  const toggleVecina = (n) =>
+    setVecinasSel(v => v.includes(n) ? v.filter(x => x !== n) : [...v, n])
+
+  async function guardarGuardadas(lista) {
+    setGuardadas(lista)
+    if (!miTranspId) return
+    const { error } = await supabase.from('transportistas')
+      .update({ busquedas_guardadas: lista }).eq('id', miTranspId)
+    if (error) console.error('[Búsquedas guardadas]', error)
+  }
+
+  const guardarBusqueda = () => {
+    const l = busq.lugar
+    if (!l) return
+    const nueva = { localidad: l.localidad, departamento: l.departamento, provincia: l.provincia, vecinas: vecinasSel }
+    const resto = guardadas.filter(g => !(normalizar(g.localidad) === normalizar(l.localidad) && mismaProvincia(g.provincia, l.provincia)))
+    guardarGuardadas([nueva, ...resto].slice(0, 6))
+  }
+
+  const quitarBusqueda = (g) =>
+    guardarGuardadas(guardadas.filter(x => x !== g))
+
+  const usarGuardada = async (g) => {
+    const lugar = { localidad: g.localidad, departamento: g.departamento, provincia: g.provincia }
+    const sel = await elegirLugar(lugar, g.vecinas || [])
+    await buscar(lugar, sel)
+  }
+
+  const yaGuardada = !!busq.lugar && guardadas.some(g =>
+    normalizar(g.localidad) === normalizar(busq.lugar.localidad) && mismaProvincia(g.provincia, busq.lugar.provincia) &&
+    (g.vecinas || []).length === vecinasSel.length &&
+    (g.vecinas || []).every(v => vecinasSel.some(x => normalizar(x) === normalizar(v))))
 
   useAutoRefresh(cargar, 30000)
 
@@ -124,18 +183,17 @@ export default function Disponibles() {
     const r = await buscarLocalidades(d.destino_localidad, d.destino_provincia)
     const lugar = r.find(o => normalizar(o.localidad) === normalizar(d.destino_localidad)) ||
       { localidad: d.destino_localidad, departamento: '', provincia: d.destino_provincia }
-    setBusq(b => ({ ...b, lugar }))
-    await buscar(lugar)
+    const sel = await elegirLugar(lugar)
+    await buscar(lugar, sel)
   }
 
-  const buscar = async (lugarForzado) => {
+  const buscar = async (lugarForzado, vecinasForzadas) => {
     const lugar = lugarForzado?.localidad ? lugarForzado : busq.lugar
     if (!lugar) return
     setBuscando(true)
-    const { localidad, departamento, provincia } = lugar
-    let nombres = [localidad]
-    if (busq.vecinas) nombres = nombres.concat(await localidadesDelDepartamento(provincia, departamento))
-    const set = new Set(nombres.map(normalizar))
+    const { localidad, provincia } = lugar
+    const vec = Array.isArray(vecinasForzadas) ? vecinasForzadas : vecinasSel
+    const set = new Set([localidad, ...vec].map(normalizar))
 
     // Pedidos que CARGAN en esa localidad (o vecinas), vayan a donde vayan
     const r = pedidos.filter(p =>
@@ -229,16 +287,67 @@ export default function Disponibles() {
               </div>
             )}
 
+            {guardadas.length > 0 && (
+              <div className="mb-3">
+                <div className="text-[11px] font-semibold text-azul-600 mb-1">⭐ Mis búsquedas fijas</div>
+                <div className="flex gap-2 flex-wrap">
+                  {guardadas.map((g, i) => (
+                    <span key={i} className="inline-flex items-center rounded-full border border-azul-200 bg-azul-50 text-azul-700 text-xs font-medium">
+                      <button onClick={() => usarGuardada(g)} className="pl-3 pr-1 py-1.5">
+                        📍 {g.localidad}{g.vecinas?.length ? ` +${g.vecinas.length}` : ''}
+                      </button>
+                      <button onClick={() => quitarBusqueda(g)} className="pr-2.5 pl-1 py-1.5 text-azul-400" title="Quitar">✕</button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <Field label="¿Dónde querés cargar?" hint="Ej: donde vas a descargar, para volver cargado">
               <LocalidadInput value={busq.lugar?.localidad || ''} placeholder="Ej: Rosario"
-                onChange={() => setB('lugar', null)}
-                onSelect={o => setB('lugar', o)} />
+                onChange={() => { setB('lugar', null); setVecinasDisp([]); setVecinasSel([]) }}
+                onSelect={o => elegirLugar(o)} />
             </Field>
 
-            <label className="flex items-center gap-2 text-xs text-gray-600 mb-3">
-              <input type="checkbox" checked={busq.vecinas} onChange={e => setB('vecinas', e.target.checked)} />
-              Incluir localidades vecinas {busq.lugar?.departamento ? `(${busq.lugar.departamento})` : ''}
-            </label>
+            {busq.lugar && (
+              <div className="mb-3 border border-gray-200 rounded-[10px]">
+                <button type="button" onClick={() => setVerVecinas(v => !v)}
+                  className="w-full text-left px-3 py-2 text-xs text-gray-700">
+                  <b>{busq.lugar.localidad}</b>
+                  {vecinasSel.length > 0 && ` + ${vecinasSel.length} vecina${vecinasSel.length > 1 ? 's' : ''}`}
+                  <span className="float-right text-azul-600">{verVecinas ? '▲' : 'Sumar vecinas ▼'}</span>
+                </button>
+                {verVecinas && (
+                  <div className="px-3 pb-3">
+                    {vecinasDisp.length === 0 ? (
+                      <p className="text-xs text-gray-400">No se encontraron otras localidades de {busq.lugar.departamento || 'ese departamento'}.</p>
+                    ) : (
+                      <>
+                        <div className="flex gap-3 mb-2 text-[11px]">
+                          <button type="button" className="text-azul-600" onClick={() => setVecinasSel(vecinasDisp)}>Todas</button>
+                          <button type="button" className="text-gray-400" onClick={() => setVecinasSel([])}>Ninguna</button>
+                          <span className="text-gray-400 ml-auto">{busq.lugar.departamento}</span>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto grid grid-cols-2 gap-x-3 gap-y-1">
+                          {vecinasDisp.map(n => (
+                            <label key={n} className="flex items-center gap-2 text-xs text-gray-600">
+                              <input type="checkbox" checked={vecinasSel.includes(n)} onChange={() => toggleVecina(n)} />
+                              {n}
+                            </label>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+                <div className="px-3 pb-2">
+                  <button type="button" onClick={guardarBusqueda} disabled={yaGuardada}
+                    className="text-[11px] font-semibold text-azul-600 disabled:text-gray-400">
+                    {yaGuardada ? '⭐ Guardada como búsqueda fija' : '☆ Dejar fija para próximas búsquedas'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             <Field label="Tipo de carga">
               <div className="flex gap-2">

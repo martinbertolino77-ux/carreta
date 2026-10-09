@@ -14,9 +14,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
-      - run: npm ci
+      - run: npm install --no-audit --no-fund
 
       - run: npm run build
         env:
@@ -25,13 +24,20 @@ jobs:
           VITE_GOOGLE_MAPS_KEY: ${{ secrets.VITE_GOOGLE_MAPS_KEY }}
           VITE_VAPID_PUBLIC_KEY: ${{ secrets.VITE_VAPID_PUBLIC_KEY }}
 
-      - name: Subir dist por FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: c2871848.ferozo.com
-          username: c2871848
-          password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftp
-          timeout: 120000
-          local-dir: ./dist/
-          server-dir: ./public_html/
+      - name: Instalar lftp
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+
+      - name: Subir dist por FTPS
+        env:
+          LFTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: |
+          lftp -c "
+            set ftp:ssl-force true;
+            set ftp:ssl-protect-data true;
+            set ftp:passive-mode true;
+            set ssl:verify-certificate no;
+            set net:timeout 30;
+            set net:max-retries 3;
+            open --env-password -u c2871848 c2871848.ferozo.com;
+            mirror -R --verbose --parallel=3 dist/ public_html/
+          "

@@ -26,6 +26,7 @@ export default function Flota({ chasis, acoplados, choferes, onAgregar, onEditar
   const [tab, setTab] = useState('chasis')
   const [busca, setBusca] = useState('')
   const [abiertos, setAbiertos] = useState({})   // clave de grupo → abierto
+  const [abierta, setAbierta] = useState(false)   // la tarjeta arranca replegada
 
   const TABS = [
     { id: 'chasis',    label: 'Chasis',    n: chasis.length,    icono: '🚛' },
@@ -57,8 +58,8 @@ export default function Flota({ chasis, acoplados, choferes, onAgregar, onEditar
     return res
   }, [filtrada, tab])
 
-  // Con búsqueda o con un solo grupo, todo abierto; si no, abiertos los que el usuario abrió (inactivos cerrado)
-  const estaAbierto = (gr) => q || grupos.length === 1 ? true : (abiertos[gr.clave] ?? (!gr.inactivos && grupos.length <= 3))
+  // Todo replegado; se abre al tocar. Con búsqueda se abren los grupos con resultados.
+  const estaAbierto = (gr) => q ? true : !!abiertos[gr.clave]
   const toggle = (gr) => setAbiertos(a => ({ ...a, [gr.clave]: !estaAbierto(gr) }))
 
   const tabla = tab === 'chasis' ? 'chasis' : tab === 'acoplados' ? 'acoplados' : 'choferes'
@@ -89,8 +90,20 @@ export default function Flota({ chasis, acoplados, choferes, onAgregar, onEditar
 
   return (
     <Card className="mb-3">
-      <div className="flex items-center justify-between mb-2.5">
-        <div className="text-sm font-semibold text-gray-900">Mi flota</div>
+      <button onClick={() => setAbierta(a => !a)} className="w-full flex items-center justify-between text-left">
+        <div>
+          <div className="text-sm font-semibold text-gray-900">{abierta ? '▾' : '▸'} Mi flota</div>
+          {!abierta && (
+            <div className="text-[11px] text-gray-400 mt-0.5">
+              {chasis.length} chasis · {acoplados.length} remolques · {choferes.length} choferes
+            </div>
+          )}
+        </div>
+        {!abierta && <span className="text-xs text-azul-600 font-semibold">Ver</span>}
+      </button>
+
+      {abierta && (<>
+      <div className="flex justify-end mt-2 mb-2">
         <button onClick={() => onAgregar(tab)} className="text-xs text-azul-600 font-semibold">
           + Agregar {tab === 'chasis' ? 'chasis' : tab === 'acoplados' ? 'remolque' : 'chofer'}
         </button>
@@ -124,6 +137,7 @@ export default function Flota({ chasis, acoplados, choferes, onAgregar, onEditar
           abierto={estaAbierto(gr)} onToggle={() => toggle(gr)} render={fila}
           aviso={tab === 'choferes' ? 0 : gr.items.filter(x => !x.tara_kg).length} />
       ))}
+      </>)}
     </Card>
   )
 }

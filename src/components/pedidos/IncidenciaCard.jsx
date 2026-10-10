@@ -47,7 +47,7 @@ export default function IncidenciaCard({ inc, cv, rol, tieneDocumento, docLabel 
         </div>
       )}
       {inc.nuevo_chofer_nombre && (
-        <div className="text-[11px] text-gray-800"><b>Chofer:</b> {inc.nuevo_chofer_nombre}{inc.nuevo_chofer_dni ? ` · DNI ${inc.nuevo_chofer_dni}` : ''}</div>
+        <div className="text-[11px] text-gray-800"><b>Chofer:</b> {inc.nuevo_chofer_nombre}{inc.nuevo_chofer_cuit ? ` · CUIT/CUIL ${inc.nuevo_chofer_cuit}` : (inc.nuevo_chofer_dni ? ` · DNI ${inc.nuevo_chofer_dni}` : '')}</div>
       )}
       {inc.demora && <div className="text-[11px] text-gray-800"><b>Demora estimada:</b> {inc.demora}</div>}
       {inc.accion === 'siniestro' && (

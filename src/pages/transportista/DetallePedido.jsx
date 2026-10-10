@@ -60,7 +60,7 @@ export default function DetallePedidoTransp() {
   const [camionDescargando, setCamionDescargando] = useState(null)
   const [formDescarga, setFormDescarga] = useState({ kilos_descargados: '', humedad: '', cuerpos_extraños: '', granos_dañados: '' })
   const [modalIncidencia, setModalIncidencia] = useState(null) // camionViaje id
-  const INC_VACIA = { accion:'', tipo:'rotura', descripcion:'', chasisId:'', chasisDom:'', chasisTara:'', acopladoId:'', acopladoDom:'', acopladoTara:'', choferId:'', choferNombre:'', choferDni:'', transpCuit:'', transpNombre:'', demora:'', kilosLlegados:'' }
+  const INC_VACIA = { accion:'', tipo:'rotura', descripcion:'', chasisId:'', chasisDom:'', chasisTara:'', acopladoId:'', acopladoDom:'', acopladoTara:'', choferId:'', choferNombre:'', choferCuit:'', transpCuit:'', transpNombre:'', demora:'', kilosLlegados:'' }
   const [formInc, setFormInc] = useState(INC_VACIA)
   const [modalCargado, setModalCargado] = useState(null)   // camionViaje id
   const [kilosCargados, setKilosCargados] = useState('')
@@ -743,7 +743,7 @@ export default function DetallePedidoTransp() {
             p_nuevo_acoplado_tara: (acc === 'transbordo_otro' || (pideEquipoFlota && !formInc.acopladoId)) && formInc.acopladoTara ? Number(formInc.acopladoTara) : null,
             p_nuevo_chofer_id:     pideEquipoFlota ? (formInc.choferId || null) : null,
             p_nuevo_chofer_nombre: (acc === 'transbordo_otro' || (pideEquipoFlota && !formInc.choferId)) ? (formInc.choferNombre || null) : null,
-            p_nuevo_chofer_dni:    (acc === 'transbordo_otro' || (pideEquipoFlota && !formInc.choferId)) ? (formInc.choferDni || null) : null,
+            p_nuevo_chofer_cuit:   (acc === 'transbordo_otro' || (pideEquipoFlota && !formInc.choferId)) ? (formInc.choferCuit || null) : null,
             p_transporte_cuit:     acc === 'transbordo_otro' ? formInc.transpCuit : null,
             p_transporte_nombre:   acc === 'transbordo_otro' ? (formInc.transpNombre || null) : null,
             p_demora:              acc === 'reparacion' ? (formInc.demora || null) : null,
@@ -818,7 +818,7 @@ export default function DetallePedidoTransp() {
               </>) : null}
               <div className="text-xs font-semibold text-gray-700 mb-2 mt-2">Chofer de reemplazo</div>
               <Field label="Chofer de tu flota">
-                <Select value={formInc.choferId} onChange={e => setFormInc(f => ({...f, choferId: e.target.value, choferNombre:'', choferDni:''}))}>
+                <Select value={formInc.choferId} onChange={e => setFormInc(f => ({...f, choferId: e.target.value, choferNombre:'', choferCuit:''}))}>
                   <option value="">Sin cambio / otro chofer (manual)</option>
                   {choferes.map(c => <option key={c.id} value={c.id}>{c.nombre} {c.apellido}</option>)}
                 </Select>
@@ -826,7 +826,7 @@ export default function DetallePedidoTransp() {
               {!formInc.choferId && (
                 <div className="grid grid-cols-2 gap-2 mb-3">
                   <Field label="Nombre y apellido"><Input placeholder="Ej: Juan Pérez" value={formInc.choferNombre} onChange={e => set('choferNombre', e.target.value)} /></Field>
-                  <Field label="DNI"><Input placeholder="Ej: 30123456" value={formInc.choferDni} onChange={e => set('choferDni', e.target.value.replace(/\D/g,''))} /></Field>
+                  <Field label="CUIT/CUIL *"><Input placeholder="11 dígitos" maxLength={13} value={formInc.choferCuit} onChange={e => set('choferCuit', e.target.value.replace(/[^\d-]/g,''))} /></Field>
                 </div>
               )}
             </>)}
@@ -840,7 +840,7 @@ export default function DetallePedidoTransp() {
                 <Field label="Dominio chasis *"><Input placeholder="Ej: AB123CD" value={formInc.chasisDom} onChange={e => set('chasisDom', e.target.value.toUpperCase())} /></Field>
                 <Field label="Dominio remolque"><Input placeholder="Ej: AC456EF" value={formInc.acopladoDom} onChange={e => set('acopladoDom', e.target.value.toUpperCase())} /></Field>
                 <Field label="Chofer *"><Input placeholder="Nombre y apellido" value={formInc.choferNombre} onChange={e => set('choferNombre', e.target.value)} /></Field>
-                <Field label="DNI chofer"><Input placeholder="Ej: 30123456" value={formInc.choferDni} onChange={e => set('choferDni', e.target.value.replace(/\D/g,''))} /></Field>
+                <Field label="CUIT/CUIL chofer *"><Input placeholder="11 dígitos" maxLength={13} value={formInc.choferCuit} onChange={e => set('choferCuit', e.target.value.replace(/[^\d-]/g,''))} /></Field>
               </div>
               <p className="text-[11px] text-gray-400 mb-2">Vos seguís como responsable del viaje en Carreta.</p>
             </>)}

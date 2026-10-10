@@ -16,6 +16,7 @@ import LocalidadInput from '../../components/ui/LocalidadInput'
 import { formatCuit } from '../../utils/format'
 import Contador from '../../components/ui/Contador'
 import { validarCuit, validarDni } from '../../utils/validaciones'
+import Flota from '../../components/transportista/Flota'
 
 const INIT_CHASIS   = { dominio: '', tipo: 'solo_chasis', tara_kg: '' }
 const INIT_ACOPLADO = { dominio: '', tipo: '', tara_kg: '', capacidad_kg: '', seguro_poliza: '' }
@@ -227,76 +228,11 @@ export default function PerfilTransp() {
           )}
         </Card>
 
-        {/* Chasis */}
-        <Card className="mb-3">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-sm font-semibold text-gray-900">Chasis</div>
-            <button onClick={() => abrirChasis()} className="text-xs text-azul-600 font-semibold">+ Agregar</button>
-          </div>
-          {chasis.length === 0 ? (
-            <div className="text-center py-4"><div className="text-2xl mb-1 opacity-40">🚛</div><div className="text-xs text-gray-400">Sin chasis cargados</div></div>
-          ) : chasis.map(c => (
-            <div key={c.id} className="flex items-center justify-between border border-gray-100 rounded-[10px] px-3 py-2.5 mb-2">
-              <div>
-                <div className="text-sm font-semibold text-gray-900">{c.dominio}</div>
-                <div className="text-xs text-gray-400">
-                  {TIPOS_CHASIS[c.tipo] || 'Solo chasis'}{c.tara_kg ? ` · Tara ${c.tara_kg} kg` : ' · ⚠️ falta tara'} · {c.activo ? 'Activo' : 'Inactivo'}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button onClick={() => abrirChasis(c)} className="text-xs text-azul-600">Editar</button>
-                <Toggle value={c.activo} onChange={() => toggleItem('chasis', c.id, c.activo)} />
-              </div>
-            </div>
-          ))}
-        </Card>
-
-        {/* Acoplados */}
-        <Card className="mb-3">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-sm font-semibold text-gray-900">Remolques (acoplado, tolva, jaula, batea)</div>
-            <button onClick={() => abrirAcoplado()} className="text-xs text-azul-600 font-semibold">+ Agregar</button>
-          </div>
-          {acoplados.length === 0 ? (
-            <div className="text-center py-4"><div className="text-2xl mb-1 opacity-40">🔗</div><div className="text-xs text-gray-400">Sin acoplados cargados</div></div>
-          ) : acoplados.map(a => (
-            <div key={a.id} className="flex items-center justify-between border border-gray-100 rounded-[10px] px-3 py-2.5 mb-2">
-              <div>
-                <div className="text-sm font-semibold text-gray-900">{a.dominio}</div>
-                <div className="text-xs text-gray-400">
-                  {a.tipo ? `${VEHICULOS[a.tipo] || a.tipo} · ` : '⚠️ falta tipo · '}{a.tara_kg ? `Tara ${a.tara_kg} kg · ` : '⚠️ falta tara · '}{a.capacidad_kg ? `Cap: ${a.capacidad_kg} kg` : ''}
-                  {a.seguro_poliza ? ` · Póliza: ${a.seguro_poliza}` : ''}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button onClick={() => abrirAcoplado(a)} className="text-xs text-azul-600">Editar</button>
-                <Toggle value={a.activo} onChange={() => toggleItem('acoplados', a.id, a.activo)} />
-              </div>
-            </div>
-          ))}
-        </Card>
-
-        {/* Choferes */}
-        <Card className="mb-3">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-sm font-semibold text-gray-900">Choferes</div>
-            <button onClick={() => abrirChofer()} className="text-xs text-azul-600 font-semibold">+ Agregar</button>
-          </div>
-          {choferes.length === 0 ? (
-            <div className="text-center py-4"><div className="text-2xl mb-1 opacity-40">👤</div><div className="text-xs text-gray-400">Sin choferes cargados</div></div>
-          ) : choferes.map(c => (
-            <div key={c.id} className="flex items-center justify-between border border-gray-100 rounded-[10px] px-3 py-2.5 mb-2">
-              <div>
-                <div className="text-sm font-semibold text-gray-900">{c.nombre} {c.apellido}</div>
-                <div className="text-xs text-gray-400">DNI: {c.dni} · Carnet: {c.carnet}</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button onClick={() => abrirChofer(c)} className="text-xs text-azul-600">Editar</button>
-                <Toggle value={c.activo} onChange={() => toggleItem('choferes', c.id, c.activo)} />
-              </div>
-            </div>
-          ))}
-        </Card>
+        {/* Flota: chasis, remolques y choferes agrupados */}
+        <Flota chasis={chasis} acoplados={acoplados} choferes={choferes}
+          onAgregar={(t) => t === 'chasis' ? abrirChasis() : t === 'acoplados' ? abrirAcoplado() : abrirChofer()}
+          onEditar={(t, x) => t === 'chasis' ? abrirChasis(x) : t === 'acoplados' ? abrirAcoplado(x) : abrirChofer(x)}
+          onToggleActivo={toggleItem} />
 
         {/* Notificaciones */}
         <Card className="mb-3">

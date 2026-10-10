@@ -23,7 +23,16 @@ export default function OlvidePassword() {
       captchaToken,
     })
     if (err) {
-      setError('No pudimos enviar el email. Intentá de nuevo.')
+      console.error('[recover]', err.status, err.message)
+      const m = (err.message || '').toLowerCase()
+      if (err.status === 429 || m.includes('rate limit'))
+        setError('Hiciste muchos intentos seguidos. Esperá unos minutos y probá de nuevo.')
+      else if (m.includes('captcha'))
+        setError('Falló el captcha. Marcalo de nuevo y reintentá.')
+      else if (err.status === 504 || m.includes('deadline') || m.includes('sending'))
+        setError('El servidor de correo no respondió. Probá en unos minutos o escribinos a soporte@carreta.com.ar.')
+      else
+        setError(`No pudimos enviar el email: ${err.message}`)
       captchaRef.current?.resetCaptcha()
       setCaptchaToken(null)
     } else {

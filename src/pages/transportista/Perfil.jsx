@@ -24,6 +24,7 @@ const INIT_CHOFER   = { nombre: '', apellido: '', dni: '', cuit: '', carnet: '' 
 export default function PerfilTransp() {
   const { usuario, cuenta, setRol, signOut, cargarUsuario } = useAuth()
   const navigate = useNavigate()
+  const esMaster = cuenta?.permiso === 'master'
   const [transp, setTransp]           = useState(null)
   const [chasis, setChasis]           = useState([])
   const [acoplados, setAcoplados]     = useState([])
@@ -49,9 +50,8 @@ export default function PerfilTransp() {
     cargarTodo()
     setFormPerfil({
       nombre: usuario.nombre || '', apellido: usuario.apellido || '',
-      razon_social: usuario.razon_social || '', cuit: usuario.cuit || '',
-      telefono: usuario.telefono || '', domicilio: usuario.domicilio || '',
-      localidad: usuario.localidad || '', provincia: usuario.provincia || '',
+      razon_social: cuenta?.razon_social || '', telefono: usuario.telefono || '', domicilio: cuenta?.domicilio || '',
+      localidad: cuenta?.localidad || '', provincia: cuenta?.provincia || '',
     })
   }, [usuario])
 
@@ -78,7 +78,15 @@ export default function PerfilTransp() {
 
   const guardarPerfil = async () => {
     setSaving(true)
-    await supabase.from('usuarios').update(formPerfil).eq('id', usuario.id)
+    const { nombre, apellido, telefono } = formPerfil
+    await supabase.from('usuarios').update({ nombre, apellido, telefono }).eq('id', usuario.id)
+    if (esMaster) {
+      const { error } = await supabase.rpc('actualizar_empresa', {
+        p_cuenta: cuenta.id, p_razon_social: formPerfil.razon_social, p_domicilio: formPerfil.domicilio,
+        p_localidad: formPerfil.localidad, p_provincia: formPerfil.provincia,
+      })
+      if (error) alert(error.message)
+    }
     await cargarUsuario(usuario.id)
     setSaving(false); setEditPerfil(false)
   }
@@ -154,7 +162,7 @@ export default function PerfilTransp() {
         <div className="text-center py-4 mb-2">
           <div className="w-16 h-16 rounded-full bg-azul-50 border-[3px] border-azul-600 flex items-center justify-center text-xl font-bold text-azul-800 mx-auto mb-2">{initials}</div>
           <div className="text-base font-bold text-gray-900">{usuario?.nombre} {usuario?.apellido}</div>
-          <div className="text-xs text-gray-400">CUIT: {formatCuit(usuario?.cuit || '')}</div>
+          <div className="text-xs text-gray-400">CUIT: {formatCuit(cuenta?.cuit || '')}</div>
           <div className="flex justify-center gap-2 mt-2">
             <span className="bg-azul-50 text-azul-600 border border-azul-100 text-[10px] font-semibold px-2 py-0.5 rounded-full">🚛 Transportista</span>
             <button onClick={() => { setRol(null); navigate('/roles') }} className="bg-gray-100 text-gray-500 text-[10px] font-semibold px-2 py-0.5 rounded-full">Cambiar rol</button>
@@ -185,8 +193,10 @@ export default function PerfilTransp() {
                 <Field label="Nombre"><Input value={formPerfil.nombre} onChange={e => setFormPerfil(f => ({...f, nombre: e.target.value}))} /></Field>
                 <Field label="Apellido"><Input value={formPerfil.apellido} onChange={e => setFormPerfil(f => ({...f, apellido: e.target.value}))} /></Field>
               </div>
-              <Field label="Razón social"><Input value={formPerfil.razon_social || ''} onChange={e => setFormPerfil(f => ({...f, razon_social: e.target.value}))} /></Field>
               <Field label="Teléfono"><Input value={formPerfil.telefono} onChange={e => setFormPerfil(f => ({...f, telefono: e.target.value}))} /></Field>
+              {esMaster ? <>
+              <div className="text-[11px] font-semibold text-gray-400 mt-2 mb-1">DATOS DE LA EMPRESA</div>
+              <Field label="Razón social"><Input value={formPerfil.razon_social || ''} onChange={e => setFormPerfil(f => ({...f, razon_social: e.target.value}))} /></Field>
               <Field label="Domicilio"><Input value={formPerfil.domicilio} onChange={e => setFormPerfil(f => ({...f, domicilio: e.target.value}))} /></Field>
               <div className="grid grid-cols-2 gap-2">
                 <Field label="Localidad base">
@@ -196,10 +206,13 @@ export default function PerfilTransp() {
                 </Field>
                 <Field label="Provincia"><Select value={formPerfil.provincia} onChange={e => setFormPerfil(f => ({...f, provincia: e.target.value}))}>{PROVINCIAS.map(p => <option key={p}>{p}</option>)}</Select></Field>
               </div>
+              </> : (
+                <p className="text-[11px] text-gray-400 mb-2">Los datos de la empresa los edita un usuario master.</p>
+              )}
               <Button onClick={guardarPerfil} disabled={saving} className="mt-1">{saving ? 'Guardando…' : 'Guardar cambios'}</Button>
             </>
           ) : (
-            [['Teléfono', usuario?.telefono], ['Email', usuario?.email], ['Domicilio', usuario?.domicilio], ['Localidad', usuario?.localidad], ['Provincia', usuario?.provincia]].map(([label, val]) => val ? (
+            [['Teléfono', usuario?.telefono], ['Email', usuario?.email], ['Domicilio', cuenta?.domicilio], ['Localidad', cuenta?.localidad], ['Provincia', cuenta?.provincia]].map(([label, val]) => val ? (
               <div key={label} className="flex items-start py-2 border-b border-gray-50 last:border-0">
                 <span className="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">{label}</span>
                 <span className="text-xs font-medium text-gray-800 flex-1">{val}</span>

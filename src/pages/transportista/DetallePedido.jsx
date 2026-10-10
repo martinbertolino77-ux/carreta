@@ -14,10 +14,11 @@ import Route from '../../components/ui/Route'
 import { ESTADOS_OFERTA, ETAPAS_TRANSPORTISTA, CATEGORIAS_HACIENDA } from '../../utils/constants'
 import ModalCancelar from '../../components/pedidos/ModalCancelar'
 import { formatNroPedido, formatFecha, formatNum } from '../../utils/format'
-import { tituloPedido, iconoPedido, bgPedido } from '../../utils/pedido'
+import { tituloPedido, iconoPedido, bgPedido, documentoDe } from '../../utils/pedido'
 import { TIPOS_CHASIS, VEHICULOS, equipoDe } from '../../utils/constants'
 import Condiciones from '../../components/pedidos/Condiciones'
 import NotasPedido from '../../components/pedidos/NotasPedido'
+import IncidenciaCard, { pideDocumento } from '../../components/pedidos/IncidenciaCard'
 import MapRuta from '../../components/ui/MapRuta'
 import CalifDisplay from '../../components/ui/CalifDisplay'
 import ModalCalificar from '../../components/pedidos/ModalCalificar'
@@ -59,7 +60,11 @@ export default function DetallePedidoTransp() {
   const [camionDescargando, setCamionDescargando] = useState(null)
   const [formDescarga, setFormDescarga] = useState({ kilos_descargados: '', humedad: '', cuerpos_extraños: '', granos_dañados: '' })
   const [modalIncidencia, setModalIncidencia] = useState(null) // camionViaje id
-  const [formInc, setFormInc] = useState({ tipo:'rotura', descripcion:'', chasisId:'', chasisDom:'', chasisTara:'', acopladoId:'', acopladoDom:'', acopladoTara:'', choferId:'', choferNombre:'', choferDni:'' })
+  const INC_VACIA = { accion:'', tipo:'rotura', descripcion:'', chasisId:'', chasisDom:'', chasisTara:'', acopladoId:'', acopladoDom:'', acopladoTara:'', choferId:'', choferNombre:'', choferDni:'', transpCuit:'', transpNombre:'', demora:'', kilosLlegados:'' }
+  const [formInc, setFormInc] = useState(INC_VACIA)
+  const [modalCargado, setModalCargado] = useState(null)   // camionViaje id
+  const [kilosCargados, setKilosCargados] = useState('')
+  const [savingCargado, setSavingCargado] = useState(false)
   const [savingInc, setSavingInc] = useState(false)
   const [misIncidencias, setMisIncidencias] = useState([])
   const [ocupados, setOcupados] = useState([])
@@ -272,6 +277,28 @@ export default function DetallePedidoTransp() {
   }
 
   // Paso 6: informar descarga
+  // Documento vigente del camión (los anulados por una incidencia no cuentan)
+  const docVigente = (cvId) => documentos.find(d => d.camion_viaje_id === cvId && !d.anulado)
+  const docLabel = documentoDe(pedido).label
+
+  const resolverAviso = async (incId) => {
+    const { error } = await supabase.rpc('resolver_aviso', { p_incidencia_id: incId })
+    if (error) alert(error.message)
+    await cargar(true)
+  }
+
+  const confirmarCargado = async () => {
+    setSavingCargado(true)
+    const { error } = await supabase.rpc('marcar_cargado', {
+      p_camion_viaje_id: modalCargado,
+      p_kilos: kilosCargados ? Number(kilosCargados) : null,
+    })
+    setSavingCargado(false)
+    if (error) { alert(error.message); return }
+    setModalCargado(null)
+    await cargar(true)
+  }
+
   const abrirModalDescarga = (camionId) => {
     setCamionDescargando(camionId)
     setFormDescarga({ kilos_descargados: '', humedad: '', cuerpos_extraños: '', granos_dañados: '' })
@@ -300,7 +327,7 @@ export default function DetallePedidoTransp() {
     const doIds = (await supabase.from('datos_operativos').select('id')
       .eq('pedido_id', id).eq('transportista_id', transportista?.id)).data?.map(d => d.id) || []
     const { data: pend } = await supabase.from('camiones_viaje').select('id')
-      .in('datos_operativos_id', doIds).is('fecha_descarga', null)
+      .in('datos_operativos_id', doIds).is('fecha_descarga', null).eq('estado', 'activo')
     if (!pend?.length) setModalMonto(true)
     else await cargar(true)
   }
@@ -485,43 +512,25 @@ export default function DetallePedidoTransp() {
               <div key={cv.id} className="border border-gray-100 rounded-[10px] p-3 mb-2">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs font-semibold text-gray-900">Camión {i + 1}</span>
-                  {cv.fecha_descarga ? (
-                    <Badge color="green">✅ Descarga informada</Badge>
-                  ) : etapa === 'en_camino' ? (
-                    <Badge color="blue">En camino</Badge>
-                  ) : documentos.some(d => d.camion_viaje_id === cv.id)
-                      && !misIncidencias.some(inc => inc.camion_viaje_id === cv.id) ? (
-                    <Badge color="green">📄 Documento recibido</Badge>
-                  ) : (
+                  {cv.estado === 'baja' ? (
+                    <Badge color="gray">Baja por incidencia</Badge>
+                  ) : cv.fecha_descarga ? (
+                    <Badge color={cv.con_incidencia ? 'orange' : 'green'}>{cv.con_incidencia ? '⚠️ Cerrado con incidencia' : '✅ Descarga informada'}</Badge>
+                  ) : !docVigente(cv.id) ? (
                     <Badge color="orange">Esperando documento</Badge>
+                  ) : cv.fecha_carga ? (
+                    <Badge color="blue">🚛 Cargado, en viaje</Badge>
+                  ) : etapa === 'en_camino' ? (
+                    <Badge color="blue">En camino a cargar</Badge>
+                  ) : (
+                    <Badge color="green">📄 Documento recibido</Badge>
                   )}
                 </div>
-                {(() => {
-                  const inc = misIncidencias.find(inc => inc.camion_viaje_id === cv.id)
-                  if (!inc) return null
-                  const chasisOriginal = cv.chasis?.dominio || '—'
-                  const acopOriginal = cv.acoplados?.dominio
-                  const chasisNuevo = inc.nuevo_chasis_dom || (inc.nuevo_chasis_id ? '(de tu flota)' : null)
-                  const acopNuevo = inc.nuevo_acoplado_dom || (inc.nuevo_acoplado_id ? '(de tu flota)' : null)
-                  const choferNuevo = inc.nuevo_chofer_nombre
-                  return (
-                    <div className="bg-orange-50 border border-orange-200 rounded-[8px] px-2.5 py-2 mb-1.5">
-                      <div className="text-[11px] font-bold text-orange-700 mb-1">
-                        ⚠️ Camión {i+1} ({chasisOriginal}{acopOriginal ? ` + ${acopOriginal}` : ''}) — Incidencia: {inc.tipo}
-                      </div>
-                      {inc.descripcion && <div className="text-[11px] text-orange-600 mb-1">"{inc.descripcion}"</div>}
-                      {(chasisNuevo || acopNuevo) && (
-                        <div className="text-[11px] text-gray-700">
-                          <b>Nuevo equipo:</b> {chasisNuevo || chasisOriginal}{acopNuevo ? ` + ${acopNuevo}` : ''}
-                          {inc.nuevo_chasis_tara || inc.nuevo_acoplado_tara
-                            ? ` · tara: ${Number(inc.nuevo_chasis_tara||0)+Number(inc.nuevo_acoplado_tara||0)} kg` : ''}
-                        </div>
-                      )}
-                      {choferNuevo && <div className="text-[11px] text-gray-700"><b>Nuevo chofer:</b> {choferNuevo}{inc.nuevo_chofer_dni ? ` · DNI: ${inc.nuevo_chofer_dni}` : ''}</div>}
-                      <div className="text-[11px] text-orange-500 mt-1">Esperando nueva CPE del productor</div>
-                    </div>
-                  )
-                })()}
+                {misIncidencias.filter(inc => inc.camion_viaje_id === cv.id).map(inc => (
+                  <IncidenciaCard key={inc.id} inc={inc} cv={cv} rol="transportista"
+                    tieneDocumento={!!docVigente(cv.id)} docLabel={docLabel}
+                    onResolver={inc.accion === 'aviso_productor' || inc.accion === 'reparacion' ? resolverAviso : null} />
+                ))}
                 <div className="text-xs text-gray-500">
                   🚛 {cv.chasis?.dominio}{cv.acoplados ? ` + ${cv.acoplados.dominio}` : ''}
                   {' · '}{VEHICULOS[equipoDe(cv.chasis?.tipo, cv.acoplados?.tipo)] || ''}
@@ -535,7 +544,7 @@ export default function DetallePedidoTransp() {
                 <div className="text-xs text-gray-500 mt-0.5">👤 {cv.choferes?.nombre} {cv.choferes?.apellido}</div>
                 {cv.kilos_asignados && <div className="text-xs text-gray-400 mt-0.5">⚖️ {formatNum(cv.kilos_asignados)} kg</div>}
                 {(() => {
-                  const doc = documentos.find(d => d.camion_viaje_id === cv.id)
+                  const doc = docVigente(cv.id)
                   return doc ? (
                     <button onClick={() => descargarDoc(doc)}
                       className="mt-1.5 w-full text-xs text-azul-600 font-semibold border border-azul-200 rounded-lg px-2 py-1.5 bg-azul-50 text-left">
@@ -543,15 +552,33 @@ export default function DetallePedidoTransp() {
                     </button>
                   ) : null
                 })()}
-                {!cv.fecha_descarga && etapa === 'en_camino' && (
+                {cv.estado === 'activo' && !cv.fecha_descarga && etapa === 'en_camino' && (
                   <>
-                  <Button size="sm" variant="danger" onClick={() => { setModalIncidencia(cv.id); setFormInc(f => ({...f, tipo:'rotura', descripcion:'', chasisId:'', chasisDom:'', chasisTara:'', acopladoId:'', acopladoDom:'', acopladoTara:'', choferId:'', choferNombre:'', choferDni:''})) }} className="mt-2">
+                  {docVigente(cv.id) && !cv.fecha_carga && (
+                    <Button size="sm" variant="azul" onClick={() => { setModalCargado(cv.id); setKilosCargados(cv.kilos_asignados || '') }} className="mt-2">
+                      🚛 Cargado, salgo a destino
+                    </Button>
+                  )}
+                  {docVigente(cv.id) && cv.fecha_carga && (
+                    <Button size="sm" variant="secondary" onClick={() => abrirModalDescarga(cv.id)} className="mt-2">
+                      Informar descarga
+                    </Button>
+                  )}
+                  <Button size="sm" variant="danger" onClick={() => {
+                    setFormInc({ ...INC_VACIA, accion: cv.fecha_carga ? 'transbordo_propio' : 'cambio' })
+                    setModalIncidencia(cv.id)
+                  }} className="mt-1">
                     ⚠ Reportar incidencia
                   </Button>
-                  <Button size="sm" variant="secondary" onClick={() => abrirModalDescarga(cv.id)} className="mt-1">
-                    Informar descarga
-                  </Button>
                   </>
+                )}
+                {cv.fecha_carga && !cv.fecha_descarga && (
+                  <div className="text-xs text-azul-600 mt-1">
+                    Cargado: {formatFecha(cv.fecha_carga)}{cv.kilos_cargados ? ` · ${formatNum(cv.kilos_cargados)} kg` : ''}
+                  </div>
+                )}
+                {cv.transporte_externo && (
+                  <div className="text-xs text-gray-500 mt-0.5">Transbordo a: CUIT {cv.transporte_externo}</div>
                 )}
                 {cv.fecha_descarga && (
                   <div className="text-xs text-verde-600 mt-1">Descargado: {formatFecha(cv.fecha_descarga)}</div>
@@ -687,100 +714,179 @@ export default function DetallePedidoTransp() {
       </Modal>
 
       {/* Modal incidencia */}
-      <Modal open={!!modalIncidencia} onClose={() => setModalIncidencia(null)} title="Reportar incidencia">
-        <div className="text-xs text-gray-500 mb-4">
-          Indicá qué pasó y los datos del vehículo y chofer de reemplazo. El productor recibirá un aviso y deberá emitir una nueva CPE.
-        </div>
+      {(() => {
+        const cvInc = camionesViaje.find(c => c.id === modalIncidencia)
+        const cargado = !!cvInc?.fecha_carga
+        const acc = formInc.accion
+        const set = (k, v) => setFormInc(f => ({ ...f, [k]: v }))
+        const esGanadero = pedido?.tipo_actividad === 'ganadero'
+        const OPCIONES = cargado
+          ? [['transbordo_propio', 'Transbordo a otro camión mío'], ['transbordo_otro', 'Transbordo a otro transporte'],
+             ['reparacion', 'Se repara y sigue (demora)'], ['siniestro', 'Siniestro / pérdida de carga']]
+          : [['cambio', 'Mando otro camión o chofer'], ['baja', 'No tengo reemplazo: dar de baja el camión']]
+        const pideEquipoFlota = acc === 'cambio' || acc === 'transbordo_propio'
 
-        <Field label="Tipo de incidencia">
-          <Select value={formInc.tipo} onChange={e => setFormInc(f => ({...f, tipo: e.target.value}))}>
-            <option value="rotura">Rotura mecánica</option>
-            <option value="accidente">Accidente</option>
-            <option value="otro">Otro</option>
-          </Select>
-        </Field>
-
-        <Field label="Descripción (opcional)">
-          <Textarea rows={2} placeholder="Detallá qué ocurrió…"
-            value={formInc.descripcion} onChange={e => setFormInc(f => ({...f, descripcion: e.target.value}))} />
-        </Field>
-
-        {pedido?.tipo_actividad !== 'ganadero' && (<>
-          <div className="text-xs font-semibold text-gray-700 mb-2 mt-2">Chasis de reemplazo</div>
-          <Field label="Chasis de tu flota">
-            <Select value={formInc.chasisId} onChange={e => setFormInc(f => ({...f, chasisId: e.target.value, chasisDom:'', chasisTara:''}))}>
-              <option value="">Otro dominio (ingresar manualmente)</option>
-              {chasis.filter(c => !enViaje('chasis_id', c.id)).map(c => (
-                <option key={c.id} value={c.id}>{c.dominio} · {TIPOS_CHASIS[c.tipo] || ''}{c.tara_kg ? ` · ${c.tara_kg}kg` : ''}</option>
-              ))}
-            </Select>
-          </Field>
-          {!formInc.chasisId && (
-            <div className="grid grid-cols-2 gap-2 mb-3">
-              <Field label="Dominio"><Input placeholder="Ej: AB123CD" value={formInc.chasisDom} onChange={e => setFormInc(f => ({...f, chasisDom: e.target.value.toUpperCase()}))} /></Field>
-              <Field label="Tara (kg)"><Input type="number" placeholder="Ej: 9500" value={formInc.chasisTara} onChange={e => setFormInc(f => ({...f, chasisTara: e.target.value}))} /></Field>
-            </div>
-          )}
-
-          <div className="text-xs font-semibold text-gray-700 mb-2 mt-2">Remolque de reemplazo</div>
-          <Field label="Remolque de tu flota">
-            <Select value={formInc.acopladoId} onChange={e => setFormInc(f => ({...f, acopladoId: e.target.value, acopladoDom:'', acopladoTara:''}))}>
-              <option value="">Otro dominio (ingresar manualmente)</option>
-              {acoplados.filter(a => !enViaje('acoplado_id', a.id)).map(a => (
-                <option key={a.id} value={a.id}>{a.dominio} · {VEHICULOS[a.tipo] || ''}{a.tara_kg ? ` · ${a.tara_kg}kg` : ''}</option>
-              ))}
-            </Select>
-          </Field>
-          {!formInc.acopladoId && (
-            <div className="grid grid-cols-2 gap-2 mb-3">
-              <Field label="Dominio"><Input placeholder="Ej: AC456EF" value={formInc.acopladoDom} onChange={e => setFormInc(f => ({...f, acopladoDom: e.target.value.toUpperCase()}))} /></Field>
-              <Field label="Tara (kg)"><Input type="number" placeholder="Ej: 7000" value={formInc.acopladoTara} onChange={e => setFormInc(f => ({...f, acopladoTara: e.target.value}))} /></Field>
-            </div>
-          )}
-        </>)}
-
-        <div className="text-xs font-semibold text-gray-700 mb-2 mt-2">Chofer de reemplazo</div>
-        <Field label="Chofer de tu flota">
-          <Select value={formInc.choferId} onChange={e => setFormInc(f => ({...f, choferId: e.target.value, choferNombre:'', choferDni:''}))}>
-            <option value="">Otro chofer (ingresar manualmente)</option>
-            {choferes.map(c => (
-              <option key={c.id} value={c.id}>{c.nombre} {c.apellido}</option>
-            ))}
-          </Select>
-        </Field>
-        {!formInc.choferId && (
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            <Field label="Nombre y apellido"><Input placeholder="Ej: Juan Pérez" value={formInc.choferNombre} onChange={e => setFormInc(f => ({...f, choferNombre: e.target.value}))} /></Field>
-            <Field label="DNI"><Input placeholder="Ej: 30123456" value={formInc.choferDni} onChange={e => setFormInc(f => ({...f, choferDni: e.target.value.replace(/\D/g,'')}))} /></Field>
-          </div>
-        )}
-
-        {savingInc && <div className="text-xs text-gray-400 mb-2">Enviando…</div>}
-
-        <Button onClick={async () => {
+        const enviar = async () => {
+          if (acc === 'baja' && !window.confirm('El camión queda dado de baja y se reabre 1 lugar en el pedido para otro transportista. ¿Confirmás?')) return
           setSavingInc(true)
+          const manualChasis = !formInc.chasisId
           const { error } = await supabase.rpc('reportar_incidencia', {
-            p_camion_viaje_id:   modalIncidencia,
-            p_tipo:              formInc.tipo,
-            p_descripcion:       formInc.descripcion || null,
-            p_nuevo_chasis_id:   formInc.chasisId || null,
-            p_nuevo_chasis_dom:  !formInc.chasisId ? (formInc.chasisDom || null) : null,
-            p_nuevo_chasis_tara: !formInc.chasisId && formInc.chasisTara ? Number(formInc.chasisTara) : null,
-            p_nuevo_acoplado_id:  formInc.acopladoId || null,
-            p_nuevo_acoplado_dom: !formInc.acopladoId ? (formInc.acopladoDom || null) : null,
-            p_nuevo_acoplado_tara: !formInc.acopladoId && formInc.acopladoTara ? Number(formInc.acopladoTara) : null,
-            p_nuevo_chofer_id:    formInc.choferId || null,
-            p_nuevo_chofer_nombre: !formInc.choferId ? (formInc.choferNombre || null) : null,
-            p_nuevo_chofer_dni:    !formInc.choferId ? (formInc.choferDni || null) : null,
+            p_camion_viaje_id:     modalIncidencia,
+            p_accion:              acc,
+            p_tipo:                formInc.tipo,
+            p_descripcion:         formInc.descripcion || null,
+            p_nuevo_chasis_id:     pideEquipoFlota ? (formInc.chasisId || null) : null,
+            p_nuevo_chasis_dom:    (acc === 'transbordo_otro' || (pideEquipoFlota && manualChasis)) ? (formInc.chasisDom || null) : null,
+            p_nuevo_chasis_tara:   (acc === 'transbordo_otro' || (pideEquipoFlota && manualChasis)) && formInc.chasisTara ? Number(formInc.chasisTara) : null,
+            p_nuevo_acoplado_id:   pideEquipoFlota ? (formInc.acopladoId || null) : null,
+            p_nuevo_acoplado_dom:  (acc === 'transbordo_otro' || (pideEquipoFlota && !formInc.acopladoId)) ? (formInc.acopladoDom || null) : null,
+            p_nuevo_acoplado_tara: (acc === 'transbordo_otro' || (pideEquipoFlota && !formInc.acopladoId)) && formInc.acopladoTara ? Number(formInc.acopladoTara) : null,
+            p_nuevo_chofer_id:     pideEquipoFlota ? (formInc.choferId || null) : null,
+            p_nuevo_chofer_nombre: (acc === 'transbordo_otro' || (pideEquipoFlota && !formInc.choferId)) ? (formInc.choferNombre || null) : null,
+            p_nuevo_chofer_dni:    (acc === 'transbordo_otro' || (pideEquipoFlota && !formInc.choferId)) ? (formInc.choferDni || null) : null,
+            p_transporte_cuit:     acc === 'transbordo_otro' ? formInc.transpCuit : null,
+            p_transporte_nombre:   acc === 'transbordo_otro' ? (formInc.transpNombre || null) : null,
+            p_demora:              acc === 'reparacion' ? (formInc.demora || null) : null,
+            p_kilos_llegados:      acc === 'siniestro' && formInc.kilosLlegados !== '' ? Number(formInc.kilosLlegados) : null,
           })
           setSavingInc(false)
           if (error) { alert(error.message); return }
           setModalIncidencia(null)
           await cargar(true)
-        }} disabled={savingInc}>
-          Enviar incidencia
+        }
+
+        return (
+          <Modal open={!!modalIncidencia} onClose={() => setModalIncidencia(null)} title="Reportar incidencia">
+            <div className="text-xs text-gray-500 mb-3">
+              {cargado
+                ? 'El camión ya está cargado. Elegí qué pasa con la carga.'
+                : 'El camión todavía no cargó. Podés mandar otro equipo o dejar el lugar para otro transportista.'}
+            </div>
+
+            <Field label="¿Qué pasa?">
+              <Select value={acc} onChange={e => set('accion', e.target.value)}>
+                {OPCIONES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </Select>
+            </Field>
+
+            <Field label="Motivo">
+              <Select value={formInc.tipo} onChange={e => set('tipo', e.target.value)}>
+                <option value="rotura">Rotura mecánica</option>
+                <option value="accidente">Accidente</option>
+                <option value="otro">Otro</option>
+              </Select>
+            </Field>
+
+            <Field label={acc === 'siniestro' || acc === 'baja' ? 'Descripción' : 'Descripción (opcional)'}>
+              <Textarea rows={2} placeholder="Detallá qué ocurrió…"
+                value={formInc.descripcion} onChange={e => set('descripcion', e.target.value)} />
+            </Field>
+
+            {/* Equipo propio de reemplazo */}
+            {pideEquipoFlota && (<>
+              {!esGanadero || acc === 'transbordo_propio' ? (<>
+                <div className="text-xs font-semibold text-gray-700 mb-2 mt-2">Chasis de reemplazo</div>
+                <Field label="Chasis de tu flota">
+                  <Select value={formInc.chasisId} onChange={e => setFormInc(f => ({...f, chasisId: e.target.value, chasisDom:'', chasisTara:''}))}>
+                    <option value="">{acc === 'cambio' ? 'Sin cambio / otro dominio (manual)' : 'Otro dominio (ingresar manualmente)'}</option>
+                    {chasis.filter(c => !enViaje('chasis_id', c.id)).map(c => (
+                      <option key={c.id} value={c.id}>{c.dominio} · {TIPOS_CHASIS[c.tipo] || ''}{c.tara_kg ? ` · ${c.tara_kg}kg` : ''}</option>
+                    ))}
+                  </Select>
+                </Field>
+                {!formInc.chasisId && (
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <Field label="Dominio"><Input placeholder="Ej: AB123CD" value={formInc.chasisDom} onChange={e => set('chasisDom', e.target.value.toUpperCase())} /></Field>
+                    <Field label="Tara (kg)"><Input type="number" placeholder="Ej: 9500" value={formInc.chasisTara} onChange={e => set('chasisTara', e.target.value)} /></Field>
+                  </div>
+                )}
+                <div className="text-xs font-semibold text-gray-700 mb-2 mt-2">Remolque de reemplazo</div>
+                <Field label="Remolque de tu flota">
+                  <Select value={formInc.acopladoId} onChange={e => setFormInc(f => ({...f, acopladoId: e.target.value, acopladoDom:'', acopladoTara:''}))}>
+                    <option value="">Sin cambio / otro dominio (manual)</option>
+                    {acoplados.filter(a => !enViaje('acoplado_id', a.id)).map(a => (
+                      <option key={a.id} value={a.id}>{a.dominio} · {VEHICULOS[a.tipo] || ''}{a.tara_kg ? ` · ${a.tara_kg}kg` : ''}</option>
+                    ))}
+                  </Select>
+                </Field>
+                {!formInc.acopladoId && (
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <Field label="Dominio"><Input placeholder="Ej: AC456EF" value={formInc.acopladoDom} onChange={e => set('acopladoDom', e.target.value.toUpperCase())} /></Field>
+                    <Field label="Tara (kg)"><Input type="number" placeholder="Ej: 7000" value={formInc.acopladoTara} onChange={e => set('acopladoTara', e.target.value)} /></Field>
+                  </div>
+                )}
+              </>) : null}
+              <div className="text-xs font-semibold text-gray-700 mb-2 mt-2">Chofer de reemplazo</div>
+              <Field label="Chofer de tu flota">
+                <Select value={formInc.choferId} onChange={e => setFormInc(f => ({...f, choferId: e.target.value, choferNombre:'', choferDni:''}))}>
+                  <option value="">Sin cambio / otro chofer (manual)</option>
+                  {choferes.map(c => <option key={c.id} value={c.id}>{c.nombre} {c.apellido}</option>)}
+                </Select>
+              </Field>
+              {!formInc.choferId && (
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <Field label="Nombre y apellido"><Input placeholder="Ej: Juan Pérez" value={formInc.choferNombre} onChange={e => set('choferNombre', e.target.value)} /></Field>
+                  <Field label="DNI"><Input placeholder="Ej: 30123456" value={formInc.choferDni} onChange={e => set('choferDni', e.target.value.replace(/\D/g,''))} /></Field>
+                </div>
+              )}
+            </>)}
+
+            {/* Transbordo a otro transporte: todo a mano (lo pide la CPE) */}
+            {acc === 'transbordo_otro' && (<>
+              <div className="text-xs font-semibold text-gray-700 mb-2 mt-2">Transporte que termina el viaje</div>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="CUIT *"><Input placeholder="11 dígitos" maxLength={13} value={formInc.transpCuit} onChange={e => set('transpCuit', e.target.value.replace(/[^\d-]/g,''))} /></Field>
+                <Field label="Razón social"><Input placeholder="Ej: Transportes SRL" value={formInc.transpNombre} onChange={e => set('transpNombre', e.target.value)} /></Field>
+                <Field label="Dominio chasis *"><Input placeholder="Ej: AB123CD" value={formInc.chasisDom} onChange={e => set('chasisDom', e.target.value.toUpperCase())} /></Field>
+                <Field label="Dominio remolque"><Input placeholder="Ej: AC456EF" value={formInc.acopladoDom} onChange={e => set('acopladoDom', e.target.value.toUpperCase())} /></Field>
+                <Field label="Chofer *"><Input placeholder="Nombre y apellido" value={formInc.choferNombre} onChange={e => set('choferNombre', e.target.value)} /></Field>
+                <Field label="DNI chofer"><Input placeholder="Ej: 30123456" value={formInc.choferDni} onChange={e => set('choferDni', e.target.value.replace(/\D/g,''))} /></Field>
+              </div>
+              <p className="text-[11px] text-gray-400 mb-2">Vos seguís como responsable del viaje en Carreta.</p>
+            </>)}
+
+            {acc === 'reparacion' && (
+              <Field label="Demora estimada">
+                <Input placeholder="Ej: 4 horas, mañana a la mañana" value={formInc.demora} onChange={e => set('demora', e.target.value)} />
+              </Field>
+            )}
+
+            {acc === 'siniestro' && (
+              <Field label="Kilos que llegaron a destino *" hint="0 si no llegó nada. El camión queda cerrado con incidencia.">
+                <Input type="number" placeholder="Ej: 0" value={formInc.kilosLlegados} onChange={e => set('kilosLlegados', e.target.value)} />
+              </Field>
+            )}
+
+            {acc === 'baja' && (
+              <Banner color="orange" className="mb-3">
+                El camión queda dado de baja y se reabre 1 lugar en el pedido para que oferte otro transportista. Tus otros camiones siguen igual.
+              </Banner>
+            )}
+
+            {pideDocumento({ accion: acc }) && (
+              <p className="text-[11px] text-gray-500 mb-2">El productor va a recibir un aviso para emitir el {docLabel} nuevo.</p>
+            )}
+
+            <Button onClick={enviar} disabled={savingInc || !acc}>
+              {savingInc ? 'Enviando…' : 'Enviar incidencia'}
+            </Button>
+            <Button variant="ghost" onClick={() => setModalIncidencia(null)} className="mt-2">Cancelar</Button>
+          </Modal>
+        )
+      })()}
+
+      {/* Modal cargado */}
+      <Modal open={!!modalCargado} onClose={() => setModalCargado(null)} title="Cargado, salgo a destino">
+        <div className="text-xs text-gray-500 mb-3">
+          Avisale al productor que el camión ya cargó y sale a destino.
+        </div>
+        <Field label="Kilos cargados (opcional)">
+          <Input type="number" placeholder="Ej: 30000" value={kilosCargados} onChange={e => setKilosCargados(e.target.value)} />
+        </Field>
+        <Button onClick={confirmarCargado} disabled={savingCargado}>
+          {savingCargado ? 'Guardando…' : '✓ Confirmar'}
         </Button>
-        <Button variant="ghost" onClick={() => setModalIncidencia(null)} className="mt-2">Cancelar</Button>
+        <Button variant="ghost" onClick={() => setModalCargado(null)} className="mt-2">Cancelar</Button>
       </Modal>
 
       <BottomTabs rol="transportista" />

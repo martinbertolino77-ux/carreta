@@ -24,6 +24,7 @@ import NotasPedido from '../../components/pedidos/NotasPedido'
 import CalifDisplay from '../../components/ui/CalifDisplay'
 import ModalCalificar from '../../components/pedidos/ModalCalificar'
 import MapRuta from '../../components/ui/MapRuta'
+import IncidenciaCard from '../../components/pedidos/IncidenciaCard'
 
 export default function DetallePedido() {
   const { usuario, cuenta } = useAuth()
@@ -46,6 +47,9 @@ export default function DetallePedido() {
   const [modalCancelar, setModalCancelar] = useState(false)
   const [documentos, setDocumentos] = useState([])
   const [incidencias, setIncidencias] = useState([])
+  const [modalAviso, setModalAviso] = useState(null)   // camionViaje id
+  const [textoAviso, setTextoAviso] = useState('')
+  const [savingAviso, setSavingAviso] = useState(false)
   const [notasOferta, setNotasOferta] = useState({})
   const [guardandoNota, setGuardandoNota] = useState({})
   const [archivoDoc, setArchivoDoc] = useState(null)
@@ -63,6 +67,21 @@ export default function DetallePedido() {
       .subscribe()
     return () => supabase.removeChannel(channel)
   }, [id])
+
+  const resolverAviso = async (incId) => {
+    const { error } = await supabase.rpc('resolver_aviso', { p_incidencia_id: incId })
+    if (error) alert(error.message)
+    await cargar(true)
+  }
+
+  const enviarAviso = async () => {
+    setSavingAviso(true)
+    const { error } = await supabase.rpc('avisar_problema_camion', { p_camion_viaje_id: modalAviso, p_descripcion: textoAviso })
+    setSavingAviso(false)
+    if (error) { alert(error.message); return }
+    setModalAviso(null)
+    await cargar(true)
+  }
 
   const abrirDoc = (cv) => {
     setCamionSeleccionado(cv)
@@ -104,9 +123,11 @@ export default function DetallePedido() {
       // Paso 5: si todos los camiones tienen documento → En camino
       const { error: errCamino } = await supabase.rpc('marcar_en_camino', { p_pedido_id: id })
       // Si había incidencia activa en algún camión, marcarla resuelta
-      const idsConInc = camionesViaje.map(c => c.id)
+      // El documento nuevo resuelve las incidencias de ESTE camión que lo pedían
+      const idsConInc = [camionSeleccionado.id]
       if (idsConInc.length) {
         await supabase.from('incidencias').update({ resuelta: true }).in('camion_viaje_id', idsConInc).eq('resuelta', false)
+          .in('accion', ['cambio', 'transbordo_propio', 'transbordo_otro'])
       }
       if (errCamino) throw errCamino
 
@@ -555,42 +576,28 @@ export default function DetallePedido() {
               )}
 
               {cvs.map((cv, i) => {
-                const doc = documentos.find(d => d.camion_viaje_id === cv.id)
+                const doc = documentos.find(d => d.camion_viaje_id === cv.id && !d.anulado)
+                const enCurso = cv.estado === 'activo' && !cv.fecha_descarga
                 return (
                   <div key={cv.id} className="border border-gray-100 rounded-[10px] p-3 mb-2">
-                    {(() => {
-                      const inc = incidencias.find(i => i.camion_viaje_id === cv.id)
-                      return inc ? (
-                        <div className="bg-orange-50 border border-orange-200 rounded-[8px] p-2.5 mb-2">
-                          <div className="text-xs font-bold text-orange-700 mb-1">
-                            ⚠️ Camión {i+1} ({cv.chasis?.dominio}{cv.acoplados ? ` + ${cv.acoplados.dominio}` : ''}) — Incidencia: {inc.tipo}
-                          </div>
-                          {inc.descripcion && <div className="text-xs text-orange-600 mb-1.5">"{inc.descripcion}"</div>}
-                          <div className="text-xs text-gray-700 mb-0.5">
-                            <b>Equipo original:</b> {cv.chasis?.dominio}{cv.acoplados ? ` + ${cv.acoplados.dominio}` : ''}
-                          </div>
-                          {(inc.nuevo_chasis_dom || inc.nuevo_acoplado_dom) && (
-                            <div className="text-xs font-semibold text-gray-900 mb-0.5">
-                              <b>Nuevo equipo para la CPE:</b> {inc.nuevo_chasis_dom || cv.chasis?.dominio}{inc.nuevo_acoplado_dom ? ` + ${inc.nuevo_acoplado_dom}` : (cv.acoplados ? ` + ${cv.acoplados.dominio}` : '')}
-                              {(inc.nuevo_chasis_tara || inc.nuevo_acoplado_tara) ? ` · tara total: ${Number(inc.nuevo_chasis_tara||0)+Number(inc.nuevo_acoplado_tara||0)} kg` : ''}
-                            </div>
-                          )}
-                          {inc.nuevo_chofer_nombre && (
-                            <div className="text-xs text-gray-700 mb-1"><b>Nuevo chofer:</b> {inc.nuevo_chofer_nombre}{inc.nuevo_chofer_dni ? ` · DNI: ${inc.nuevo_chofer_dni}` : ''}</div>
-                          )}
-                          <div className="text-xs text-orange-600 font-semibold mt-1">📄 Emitir nueva CPE con estos datos y subirla acá.</div>
-                        </div>
-                      ) : null
-                    })()}
+                    {incidencias.filter(inc => inc.camion_viaje_id === cv.id).map(inc => (
+                      <IncidenciaCard key={inc.id} inc={inc} cv={cv} rol="productor"
+                        tieneDocumento={!!doc} docLabel={docLabel}
+                        onResolver={['aviso_productor', 'reparacion'].includes(inc.accion) ? resolverAviso : null} />
+                    ))}
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-semibold text-gray-900">Camión {i + 1}</span>
-                      {cv.fecha_descarga
-                        ? <Badge color="green">✅ Descargado</Badge>
-                        : ['en_camino','descargado','finalizado'].includes(o.etapa)
-                          ? <Badge color="blue">En camino</Badge>
-                          : doc
-                            ? <Badge color="gray">Documento OK</Badge>
-                            : <Badge color="orange">Falta documento</Badge>}
+                      {cv.estado === 'baja'
+                        ? <Badge color="gray">Baja por incidencia</Badge>
+                        : cv.fecha_descarga
+                          ? <Badge color={cv.con_incidencia ? 'orange' : 'green'}>{cv.con_incidencia ? '⚠️ Cerrado con incidencia' : '✅ Descargado'}</Badge>
+                          : !doc
+                            ? <Badge color="orange">Falta documento</Badge>
+                            : cv.fecha_carga
+                              ? <Badge color="blue">🚛 Cargado, en viaje</Badge>
+                              : o.etapa === 'en_camino'
+                                ? <Badge color="blue">En camino a cargar</Badge>
+                                : <Badge color="gray">Documento OK</Badge>}
                     </div>
                     <div className="text-xs text-gray-600">
                       🚛 {cv.chasis?.dominio} <span className="text-gray-400">({TIPOS_CHASIS[cv.chasis?.tipo] || 'Chasis'}{cv.chasis?.tara_kg ? ` · tara ${formatNum(cv.chasis.tara_kg)} kg` : ''})</span>
@@ -619,13 +626,25 @@ export default function DetallePedido() {
                       <div className="mt-1.5 bg-verde-50 border border-verde-200 rounded-lg px-2.5 py-1.5 text-xs text-verde-700 font-medium">
                         ✅ {docLabel} enviado al transportista — {doc.nombre_original}
                       </div>
-                    ) : o.etapa === 'datos_enviados' && (
+                    ) : enCurso && ['datos_enviados', 'en_camino'].includes(o.etapa) && (
                       <button onClick={() => abrirDoc(cv)}
                         className="mt-1.5 w-full text-xs text-azul-600 font-semibold border border-azul-200 rounded-lg px-2 py-1.5 bg-azul-50 text-left">
                         📄 Asignar kilos / {docLabel}
                       </button>
                     )}
-                    {cv.fecha_descarga && <div className="text-xs text-verde-600 mt-1">✅ Descarga: {formatFecha(cv.fecha_descarga)}</div>}
+                    {cv.fecha_carga && !cv.fecha_descarga && (
+                      <div className="text-xs text-azul-600 mt-1">🚛 Cargado: {formatFecha(cv.fecha_carga)}{cv.kilos_cargados ? ` · ${formatNum(cv.kilos_cargados)} kg` : ''}</div>
+                    )}
+                    {cv.transporte_externo && (
+                      <div className="text-xs text-gray-500 mt-0.5">Transbordo a: CUIT {cv.transporte_externo}</div>
+                    )}
+                    {enCurso && ['datos_enviados', 'en_camino'].includes(o.etapa) && (
+                      <button onClick={() => { setModalAviso(cv.id); setTextoAviso('') }}
+                        className="mt-1.5 text-[11px] text-orange-700 font-semibold">
+                        ⚠ Avisar un problema con este camión
+                      </button>
+                    )}
+                    {cv.fecha_descarga && <div className="text-xs text-verde-600 mt-1">{cv.con_incidencia ? '⚠️ Cerrado' : '✅ Descarga'}: {formatFecha(cv.fecha_descarga)}</div>}
                     {cv.kilos_descargados && (
                       <div className="text-xs text-gray-700 mt-1 bg-gray-50 rounded-lg px-2 py-1.5 space-y-0.5">
                         <div>⚖️ <b>Kilos descargados:</b> {formatNum(cv.kilos_descargados)} kg</div>
@@ -738,6 +757,20 @@ export default function DetallePedido() {
       </Body>
 
       {/* Modal cancelar */}
+      <Modal open={!!modalAviso} onClose={() => setModalAviso(null)} title="Avisar un problema">
+        <div className="text-xs text-gray-500 mb-3">
+          El transportista recibe el aviso. Es informativo: no da de baja el camión.
+        </div>
+        <Field label="¿Qué pasó?">
+          <Textarea rows={3} placeholder="Ej: el camión no se presentó a cargar"
+            value={textoAviso} onChange={e => setTextoAviso(e.target.value)} />
+        </Field>
+        <Button onClick={enviarAviso} disabled={savingAviso || !textoAviso.trim()}>
+          {savingAviso ? 'Enviando…' : 'Enviar aviso'}
+        </Button>
+        <Button variant="ghost" onClick={() => setModalAviso(null)} className="mt-2">Cancelar</Button>
+      </Modal>
+
       <ModalCancelar
         open={modalCancelar}
         onClose={() => setModalCancelar(false)}

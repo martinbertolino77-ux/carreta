@@ -8,10 +8,10 @@ import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
 import { formatCuit } from '../utils/format'
 
-// Por ahora: master (administra todo) u operador (opera, no administra el equipo).
-// "Solo lectura" llega en la etapa 4.
+// master: administra todo · operador: opera, no administra el equipo · lectura: solo ve
 const PERMISOS = [
   { id: 'operador', label: 'Operador' },
+  { id: 'lectura',  label: 'Solo lectura' },
   { id: 'master',   label: 'Master' },
 ]
 const COLOR_PERMISO = { master: 'purple', operador: 'blue', lectura: 'gray' }
@@ -180,7 +180,6 @@ export default function Equipo() {
                     onChange={e => cambiarPermiso(m, e.target.value)}
                     className="border border-gray-200 rounded-[8px] px-2 py-1 text-xs bg-white">
                     {PERMISOS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-                    {m.permiso === 'lectura' && <option value="lectura">Solo lectura</option>}
                   </select>
                   {!yo && (
                     <button onClick={() => quitar(m)} disabled={!!ocupado}
@@ -262,6 +261,13 @@ export default function Equipo() {
         {!esMaster && (
           <p className="text-xs text-gray-400 text-center mt-3">
             Solo los usuarios master pueden aprobar pedidos, invitar o quitar integrantes.
+          </p>
+        )}
+        {esMaster && (
+          <p className="text-[11px] text-gray-400 mt-3 leading-relaxed">
+            <strong>Master:</strong> opera y administra el equipo y los datos de la empresa.{' '}
+            <strong>Operador:</strong> opera (pedidos, ofertas, camiones), no administra.{' '}
+            <strong>Solo lectura:</strong> ve todo, no puede modificar nada.
           </p>
         )}
       </Body>

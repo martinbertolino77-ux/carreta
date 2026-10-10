@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase'
 
 export default function Topbar({ title, showBack, backTo, accent = 'verde' }) {
   const navigate = useNavigate()
-  const { usuario } = useAuth()
+  const { usuario, cuenta } = useAuth()
   const [noLeidas, setNoLeidas] = useState(0)
   const [notifs, setNotifs] = useState([])
   const [showPanel, setShowPanel] = useState(false)
@@ -73,7 +73,9 @@ export default function Topbar({ title, showBack, backTo, accent = 'verde' }) {
           <div className="text-white text-sm font-semibold leading-tight">
             {title || 'Carreta'}
           </div>
-          {!title && (
+          {cuenta?.permiso === 'lectura' ? (
+            <div className="text-yellow-200 text-[10px] font-semibold">👁 Solo lectura</div>
+          ) : !title && (
             <div className="text-white/60 text-[10px]">Conectando la actividad agropecuaria</div>
           )}
         </div>

@@ -75,9 +75,10 @@ export default function DetallePedido() {
     setSavingDoc(true)
 
     try {
-      await supabase.from('camiones_viaje')
+      const { error: errKilos } = await supabase.from('camiones_viaje')
         .update({ kilos_asignados: Number(kilosInput) })
         .eq('id', camionSeleccionado.id)
+      if (errKilos) throw errKilos
 
       if (archivoDoc) {
         const fd = new FormData()

@@ -52,17 +52,26 @@ serve(async (req) => {
     }
     if (file.size > MAX_BYTES) return json({ error: 'El PDF supera 10 MB' }, 400)
 
-    // 4. El pedido tiene que ser del usuario (productor dueño)
+    // 4. El pedido tiene que ser de la cuenta del usuario, con permiso para operar
     const { data: pedido, error: pedidoError } = await supabase
       .from('pedidos')
-      .select('id, productores(usuario_id)')
+      .select('id, productores(cuenta_id)')
       .eq('id', pedidoId)
       .single()
 
     if (pedidoError || !pedido) return json({ error: 'Pedido no encontrado' }, 404)
     // deno-lint-ignore no-explicit-any
-    if ((pedido as any).productores?.usuario_id !== userId) {
-      return json({ error: 'No tenés permiso sobre este pedido' }, 403)
+    const cuentaId = (pedido as any).productores?.cuenta_id
+    const { data: miembro } = await supabase
+      .from('miembros')
+      .select('permiso')
+      .eq('cuenta_id', cuentaId)
+      .eq('usuario_id', userId)
+      .maybeSingle()
+
+    if (!miembro) return json({ error: 'No tenés permiso sobre este pedido' }, 403)
+    if (miembro.permiso === 'lectura') {
+      return json({ error: 'Tu usuario es de solo lectura. Pedile al master permiso de operador.' }, 403)
     }
 
     // 5. Subir archivo

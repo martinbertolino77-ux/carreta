@@ -103,20 +103,16 @@ async function enviarMail(supabase: any, n: any): Promise<string> {
   const pass = Deno.env.get('SMTP_PASS')
   if (!host || !user || !pass) return 'sin_config'
 
-  const { data: u } = await supabase.from('usuarios').select('email, nombre').eq('id', n.usuario_id).maybeSingle()
+  const { data: u } = await supabase.from('usuarios')
+    .select('email, nombre, notif_email_productor, notif_email_transportista').eq('id', n.usuario_id).maybeSingle()
   if (!u?.email) return 'sin_email'
 
+  // Cada integrante elige sus avisos por mail, por rol (Perfil → Mis avisos)
   if (!TIPOS_EQUIPO.includes(n.tipo)) {
-    const { data: m } = await supabase.from('miembros').select('cuenta_id').eq('usuario_id', n.usuario_id).limit(1).maybeSingle()
-    if (!m) return 'sin_cuenta'
-    const [{ data: pr }, { data: tr }] = await Promise.all([
-      supabase.from('productores').select('notif_email').eq('cuenta_id', m.cuenta_id).maybeSingle(),
-      supabase.from('transportistas').select('notif_email').eq('cuenta_id', m.cuenta_id).maybeSingle(),
-    ])
-    const quiere = n.rol === 'productor' ? pr?.notif_email
-      : n.rol === 'transportista' ? tr?.notif_email
-      : (pr?.notif_email || tr?.notif_email)
-    if (!quiere) return 'desactivado'
+    const quiere = n.rol === 'productor' ? u.notif_email_productor
+      : n.rol === 'transportista' ? u.notif_email_transportista
+      : (u.notif_email_productor || u.notif_email_transportista)
+    if (quiere === false) return 'desactivado'
   }
 
   const link = `https://carreta.com.ar${urlDestino(n)}`
@@ -131,7 +127,7 @@ async function enviarMail(supabase: any, n: any): Promise<string> {
         <a href="${link}" style="display:inline-block;background:#2e7d32;color:#fff;text-decoration:none;padding:10px 18px;border-radius:10px;font-size:14px;font-weight:bold">Ver en Carreta</a>
       </td></tr>
       <tr><td style="padding:14px 20px;border-top:1px solid #eee;font-size:11px;color:#999">
-        Recibís este mail porque tenés activados los avisos por email en Carreta. Podés desactivarlos en tu Perfil.<br>
+        Recibís este mail porque tenés activados los avisos por email en Carreta. Podés desactivarlos en tu Perfil → Mis avisos.<br>
         ¿Consultas o problemas con tu cuenta? Escribinos a <a href="mailto:soporte@carreta.com.ar" style="color:#2e7d32">soporte@carreta.com.ar</a>
       </td></tr>
     </table>

@@ -60,8 +60,8 @@ export default function PerfilTransp() {
     const { data: t } = await supabase.from('transportistas').select('*').eq('cuenta_id', cuenta?.id).single()
     setTransp(t)
     if (t) {
-      setNotifEmail(t.notif_email)
-      setNotifWA(t.notif_whatsapp)
+      setNotifEmail(usuario?.notif_email_transportista ?? true)
+      setNotifWA(usuario?.notif_wa_transportista ?? true)
       const [{ data: ch }, { data: ac }, { data: cho }] = await Promise.all([
         supabase.from('chasis').select('*').eq('transportista_id', t.id).order('dominio'),
         supabase.from('acoplados').select('*').eq('transportista_id', t.id).order('dominio'),
@@ -73,8 +73,10 @@ export default function PerfilTransp() {
     }
   }
 
+  // Avisos: cada integrante elige los suyos (se guardan en su usuario)
   async function guardarNotif(campo, v) {
-    await supabase.from('transportistas').update({ [campo]: v }).eq('cuenta_id', cuenta?.id)
+    const col = campo === 'notif_email' ? 'notif_email_transportista' : 'notif_wa_transportista'
+    await supabase.from('usuarios').update({ [col]: v }).eq('id', usuario.id)
   }
 
   const guardarPerfil = async () => {
@@ -236,7 +238,8 @@ export default function PerfilTransp() {
 
         {/* Notificaciones */}
         <Card className="mb-3">
-          <div className="text-sm font-semibold text-gray-900 mb-3">Notificaciones</div>
+          <div className="text-sm font-semibold text-gray-900 mb-0.5">Mis avisos</div>
+          <div className="text-[11px] text-gray-400 mb-2">Solo para vos: cada integrante de la cuenta elige los suyos.</div>
           <div className="flex items-center justify-between py-2 border-b border-gray-50">
             <div><div className="text-sm font-medium text-gray-800">📧 Email</div><div className="text-xs text-gray-400">Nuevos pedidos disponibles</div></div>
             <Toggle value={notifEmail} onChange={v => { setNotifEmail(v); guardarNotif('notif_email', v) }} />

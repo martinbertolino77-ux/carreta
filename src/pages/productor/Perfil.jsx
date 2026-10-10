@@ -66,17 +66,15 @@ export default function Perfil() {
     setEstablecimientos(data || [])
   }
 
-  async function cargarNotif() {
-    const { data } = await supabase
-      .from('productores')
-      .select('notif_email, notif_whatsapp')
-      .eq('cuenta_id', cuenta?.id)
-      .single()
-    if (data) { setNotifEmail(data.notif_email); setNotifWA(data.notif_whatsapp) }
+  // Avisos: cada integrante elige los suyos (se guardan en su usuario)
+  function cargarNotif() {
+    setNotifEmail(usuario?.notif_email_productor ?? true)
+    setNotifWA(usuario?.notif_wa_productor ?? true)
   }
 
   async function guardarNotif(campo, valor) {
-    await supabase.from('productores').update({ [campo]: valor }).eq('cuenta_id', cuenta?.id)
+    const col = campo === 'notif_email' ? 'notif_email_productor' : 'notif_wa_productor'
+    await supabase.from('usuarios').update({ [col]: valor }).eq('id', usuario.id)
   }
 
   const abrirNuevo = () => { setEditando(null); setForm(INIT_ESTAB); setError(''); setModalEstab(true) }
@@ -223,7 +221,8 @@ export default function Perfil() {
         </Card>
 
         <Card className="mb-3">
-          <div className="text-sm font-semibold text-gray-900 mb-3">Notificaciones</div>
+          <div className="text-sm font-semibold text-gray-900 mb-0.5">Mis avisos</div>
+          <div className="text-[11px] text-gray-400 mb-2">Solo para vos: cada integrante de la cuenta elige los suyos.</div>
           <div className="flex items-center justify-between py-2 border-b border-gray-50">
             <div><div className="text-sm font-medium text-gray-800">📧 Email</div><div className="text-xs text-gray-400">Nuevas ofertas y actualizaciones</div></div>
             <Toggle value={notifEmail} onChange={v => { setNotifEmail(v); guardarNotif('notif_email', v) }} />

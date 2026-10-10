@@ -489,6 +489,9 @@ export default function DetallePedidoTransp() {
                     <Badge color="green">✅ Descarga informada</Badge>
                   ) : etapa === 'en_camino' ? (
                     <Badge color="blue">En camino</Badge>
+                  ) : documentos.some(d => d.camion_viaje_id === cv.id)
+                      && !misIncidencias.some(inc => inc.camion_viaje_id === cv.id) ? (
+                    <Badge color="green">📄 Documento recibido</Badge>
                   ) : (
                     <Badge color="orange">Esperando documento</Badge>
                   )}

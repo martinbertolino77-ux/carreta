@@ -15,7 +15,7 @@ import { formatNroPedido, formatFecha } from '../../utils/format'
 import { tituloPedido, iconoPedido, bgPedido } from '../../utils/pedido'
 
 export default function MisPedidos() {
-  const { usuario } = useAuth()
+  const { usuario, cuenta } = useAuth()
   const navigate = useNavigate()
   const [pedidos, setPedidos] = useState([])
   const [loading, setLoading] = useState(true)
@@ -32,7 +32,7 @@ export default function MisPedidos() {
     if (!silencioso) setLoading(true)
     // Solo pedidos de ESTE productor (el usuario puede tener también rol transportista)
     const { data: prod } = await supabase
-      .from('productores').select('id').eq('usuario_id', usuario.id).maybeSingle()
+      .from('productores').select('id').eq('cuenta_id', cuenta?.id).maybeSingle()
     if (!prod) { setPedidos([]); setLoading(false); return }
 
     const { data } = await supabase

@@ -3,6 +3,7 @@ import { Suspense, lazy } from 'react'
 import { AuthProvider } from './context/AuthContext'
 import ProtectedRoute from './components/layout/ProtectedRoute'
 import AdminRoute from './components/layout/AdminRoute'
+import Inicio from './components/layout/Inicio'
 
 // Auth
 const Login            = lazy(() => import('./pages/auth/Login'))
@@ -10,6 +11,7 @@ const Roles            = lazy(() => import('./pages/auth/Roles'))
 const Registro         = lazy(() => import('./pages/auth/Registro'))
 const OlvidePassword   = lazy(() => import('./pages/auth/OlvidePassword'))
 const NuevaPassword    = lazy(() => import('./pages/auth/NuevaPassword'))
+const Equipo           = lazy(() => import('./pages/Equipo'))
 
 // Productor
 const MisPedidos     = lazy(() => import('./pages/productor/MisPedidos'))
@@ -55,7 +57,8 @@ export default function App() {
             <Route path="/olvide-password" element={<OlvidePassword />} />
             <Route path="/nueva-password" element={<NuevaPassword />} />
             <Route path="/roles" element={<ProtectedRoute><Roles /></ProtectedRoute>} />
-            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/equipo" element={<ProtectedRoute><Equipo /></ProtectedRoute>} />
+            <Route path="/" element={<Inicio />} />
 
             <Route path="/productor/pedidos" element={<ProtectedRoute rolRequerido="productor"><MisPedidos /></ProtectedRoute>} />
             <Route path="/productor/crear" element={<ProtectedRoute rolRequerido="productor"><CrearPedido /></ProtectedRoute>} />

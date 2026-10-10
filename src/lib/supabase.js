@@ -28,30 +28,34 @@ supabase.auth.onAuthStateChange((event) => {
   if (event === 'PASSWORD_RECOVERY') linkRecuperacion.esRecovery = true
 })
 
-export async function getMiTransportista(campos = 'id') {
+// Cuenta (empresa) del usuario logueado
+export async function getMiCuentaId() {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session?.user) return null
   const { data } = await supabase
+    .from('miembros').select('cuenta_id')
+    .eq('usuario_id', session.user.id).limit(1).maybeSingle()
+  return data?.cuenta_id || null
+}
+
+export async function getMiTransportista(campos = 'id') {
+  const cuentaId = await getMiCuentaId()
+  if (!cuentaId) return null
+  const { data } = await supabase
     .from('transportistas')
     .select(campos)
-    .eq('usuario_id', session.user.id)
+    .eq('cuenta_id', cuentaId)
     .maybeSingle()
   return data || null
 }
 
 export async function getMiTransportistaConNombre() {
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session?.user) return null
-  const { data: t } = await supabase
-    .from('transportistas')
-    .select('id, usuario_id')
-    .eq('usuario_id', session.user.id)
-    .maybeSingle()
+  const t = await getMiTransportista('id, usuario_id')
   if (!t) return null
   const { data: u } = await supabase
     .from('usuarios')
     .select('razon_social, nombre, apellido')
-    .eq('id', session.user.id)
+    .eq('id', t.usuario_id)
     .maybeSingle()
   return { ...t, usuarios: u }
 }

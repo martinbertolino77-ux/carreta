@@ -23,7 +23,7 @@ const INIT_ESTAB = {
 }
 
 export default function Perfil() {
-  const { usuario, setRol, signOut, cargarUsuario } = useAuth()
+  const { usuario, cuenta, setRol, signOut, cargarUsuario } = useAuth()
   const navigate = useNavigate()
   const [establecimientos, setEstablecimientos] = useState([])
   const [notifEmail, setNotifEmail] = useState(true)
@@ -56,7 +56,7 @@ export default function Perfil() {
 
   async function cargarEstablecimientos() {
     // Solo establecimientos de ESTE productor
-    const { data: prod } = await supabase.from('productores').select('id').eq('usuario_id', usuario.id).maybeSingle()
+    const { data: prod } = await supabase.from('productores').select('id').eq('cuenta_id', cuenta?.id).maybeSingle()
     if (!prod) { setEstablecimientos([]); return }
     const { data } = await supabase
       .from('establecimientos')
@@ -70,13 +70,13 @@ export default function Perfil() {
     const { data } = await supabase
       .from('productores')
       .select('notif_email, notif_whatsapp')
-      .eq('usuario_id', usuario.id)
+      .eq('cuenta_id', cuenta?.id)
       .single()
     if (data) { setNotifEmail(data.notif_email); setNotifWA(data.notif_whatsapp) }
   }
 
   async function guardarNotif(campo, valor) {
-    await supabase.from('productores').update({ [campo]: valor }).eq('usuario_id', usuario.id)
+    await supabase.from('productores').update({ [campo]: valor }).eq('cuenta_id', cuenta?.id)
   }
 
   const abrirNuevo = () => { setEditando(null); setForm(INIT_ESTAB); setError(''); setModalEstab(true) }
@@ -103,7 +103,7 @@ export default function Perfil() {
       if (editando) {
         await supabase.from('establecimientos').update(form).eq('id', editando)
       } else {
-        const { data: prod } = await supabase.from('productores').select('id').eq('usuario_id', usuario.id).single()
+        const { data: prod } = await supabase.from('productores').select('id').eq('cuenta_id', cuenta?.id).single()
         await supabase.from('establecimientos').insert({ ...form, productor_id: prod.id })
       }
       await cargarEstablecimientos(); setModalEstab(false)
@@ -221,6 +221,7 @@ export default function Perfil() {
           </div>
         </Card>
 
+        <Button variant="secondary" onClick={() => navigate('/equipo')} className="mb-2">👥 Mi equipo</Button>
         <Button variant="ghost" onClick={signOut}>Cerrar sesión</Button>
       </Body>
 

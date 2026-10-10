@@ -22,7 +22,7 @@ const INIT_HACIENDA = Object.fromEntries(
 )
 
 export default function CrearPedido() {
-  const { usuario } = useAuth()
+  const { usuario, cuenta } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const repetir = location.state?.repetir || null      // "Repetir pedido": datos del pedido anterior
@@ -71,7 +71,7 @@ export default function CrearPedido() {
     if (!usuario) return
     ;(async () => {
       // Solo establecimientos de ESTE productor
-      const { data: prod } = await supabase.from('productores').select('id').eq('usuario_id', usuario.id).maybeSingle()
+      const { data: prod } = await supabase.from('productores').select('id').eq('cuenta_id', cuenta?.id).maybeSingle()
       if (!prod) return
       const { data } = await supabase
         .from('establecimientos')
@@ -158,7 +158,7 @@ export default function CrearPedido() {
     if (!validate()) return
     setSaving(true)
     try {
-      const { data: prod } = await supabase.from('productores').select('id').eq('usuario_id', usuario.id).single()
+      const { data: prod } = await supabase.from('productores').select('id').eq('cuenta_id', cuenta?.id).single()
       if (!prod) throw new Error('No se encontró el perfil de productor')
 
       const { data: pedido, error } = await supabase.from('pedidos').insert({

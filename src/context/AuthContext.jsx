@@ -14,6 +14,7 @@ function AuthProviderInner({ children, usuarioId }) {
 export function AuthProvider({ children }) {
   const [session, setSession]   = useState(null)
   const [usuario, setUsuario]   = useState(null)
+  const [cuenta, setCuenta]     = useState(null) // empresa a la que pertenece + su permiso
   const [rol, setRol]           = useState(null)
   const [loading, setLoading]   = useState(true)
   const timerRef                = useRef(null)
@@ -23,6 +24,7 @@ export function AuthProvider({ children }) {
     await supabase.auth.signOut()
     setRol(null)
     setUsuario(null)
+    setCuenta(null)
   }, [])
 
   // Reinicia el timer cada vez que el usuario hace algo
@@ -53,23 +55,25 @@ export function AuthProvider({ children }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
       setSession(session)
       if (session) cargarUsuario(session.user.id)
-      else { setUsuario(null); setRol(null); setLoading(false) }
+      else { setUsuario(null); setCuenta(null); setRol(null); setLoading(false) }
     })
     return () => subscription.unsubscribe()
   }, [])
 
   async function cargarUsuario(id) {
-    const { data } = await supabase
-      .from('usuarios')
-      .select('*')
-      .eq('id', id)
-      .single()
+    const [{ data }, { data: mem }] = await Promise.all([
+      supabase.from('usuarios').select('*').eq('id', id).single(),
+      supabase.from('miembros')
+        .select('permiso, cuentas(id, cuit, razon_social, roles, domicilio, localidad, provincia)')
+        .eq('usuario_id', id).limit(1).maybeSingle(),
+    ])
+    setCuenta(mem?.cuentas ? { ...mem.cuentas, permiso: mem.permiso } : null)
     setUsuario(data)
     setLoading(false)
   }
 
   return (
-    <AuthContext.Provider value={{ session, usuario, rol, setRol, loading, signOut, cargarUsuario }}>
+    <AuthContext.Provider value={{ session, usuario, cuenta, rol, setRol, loading, signOut, cargarUsuario }}>
       <AuthProviderInner usuarioId={usuario?.id}>
         {children}
       </AuthProviderInner>

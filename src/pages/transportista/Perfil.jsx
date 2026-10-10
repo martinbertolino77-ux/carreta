@@ -22,7 +22,7 @@ const INIT_ACOPLADO = { dominio: '', tipo: '', tara_kg: '', capacidad_kg: '', se
 const INIT_CHOFER   = { nombre: '', apellido: '', dni: '', cuit: '', carnet: '' }
 
 export default function PerfilTransp() {
-  const { usuario, setRol, signOut, cargarUsuario } = useAuth()
+  const { usuario, cuenta, setRol, signOut, cargarUsuario } = useAuth()
   const navigate = useNavigate()
   const [transp, setTransp]           = useState(null)
   const [chasis, setChasis]           = useState([])
@@ -56,7 +56,7 @@ export default function PerfilTransp() {
   }, [usuario])
 
   async function cargarTodo() {
-    const { data: t } = await supabase.from('transportistas').select('*').eq('usuario_id', usuario.id).single()
+    const { data: t } = await supabase.from('transportistas').select('*').eq('cuenta_id', cuenta?.id).single()
     setTransp(t)
     if (t) {
       setNotifEmail(t.notif_email)
@@ -73,7 +73,7 @@ export default function PerfilTransp() {
   }
 
   async function guardarNotif(campo, v) {
-    await supabase.from('transportistas').update({ [campo]: v }).eq('usuario_id', usuario.id)
+    await supabase.from('transportistas').update({ [campo]: v }).eq('cuenta_id', cuenta?.id)
   }
 
   const guardarPerfil = async () => {
@@ -298,6 +298,7 @@ export default function PerfilTransp() {
           </div>
         </Card>
 
+        <Button variant="secondary" onClick={() => navigate('/equipo')} className="mb-2">👥 Mi equipo</Button>
         <Button variant="ghost" onClick={signOut}>Cerrar sesión</Button>
       </Body>
 

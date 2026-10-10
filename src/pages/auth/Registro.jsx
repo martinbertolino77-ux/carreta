@@ -1,9 +1,10 @@
-import { useState, useRef } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useState, useRef, useEffect } from 'react'
+import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { validarCuit, limpiarCuit } from '../../utils/validaciones'
 import LocalidadInput from '../../components/ui/LocalidadInput'
 import HCaptcha from '@hcaptcha/react-hcaptcha'
+import { CLAVE_INVITACION } from './SinCuenta'
 
 const HCAPTCHA_SITE_KEY = '06e4ad0e-ff76-469c-a496-0c929448e82e'
 
@@ -21,6 +22,12 @@ export default function Registro() {
   const [captchaToken, setCaptchaToken] = useState(null)
   const captchaRef = useRef(null)
   const [registrado, setRegistrado] = useState(false)
+  // modo: 'nueva' (empresa nueva) · 'solicitud' (pedir acceso a una empresa existente) · 'invitacion'
+  const [params] = useSearchParams()
+  const tokenInv = params.get('inv')
+  const [modo, setModo] = useState(tokenInv ? 'invitacion' : 'nueva')
+  const [inv, setInv]   = useState(tokenInv ? undefined : null)   // undefined = cargando
+  const [cuitTomado, setCuitTomado] = useState(false)
 
   const [form, setForm] = useState({
     email: '', password: '', password2: '',
@@ -30,6 +37,17 @@ export default function Registro() {
   })
 
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  // Invitación: traer los datos del link
+  useEffect(() => {
+    if (!tokenInv) return
+    try { localStorage.setItem(CLAVE_INVITACION, tokenInv) } catch { /* sin storage */ }
+    supabase.rpc('ver_invitacion', { p_token: tokenInv }).then(({ data, error }) => {
+      const i = !error && data?.[0]
+      if (i?.vigente) { setInv(i); setForm(f => ({ ...f, email: i.email })) }
+      else setInv(false)
+    })
+  }, [tokenInv])
   const toggleRol = (r) => setRoles(rs => rs.includes(r) ? rs.filter(x => x !== r) : [...rs, r])
 
   const validarStep1 = () => {
@@ -43,6 +61,7 @@ export default function Registro() {
   const validarStep2 = () => {
     if (!form.nombre)        return 'Ingresá tu nombre'
     if (!form.apellido)      return 'Ingresá tu apellido'
+    if (modo === 'invitacion') return form.telefono ? null : 'Ingresá tu teléfono'
     if (!form.razon_social)  return 'Ingresá la razón social (persona física: tu nombre y apellido)'
     const errCuit = validarCuit(form.cuit)
     if (errCuit) return errCuit
@@ -70,7 +89,8 @@ export default function Registro() {
     if (step === 1) { const e = validarStep1(); if (e) { setError(e); return }; setStep(2) }
     else if (step === 2) {
       const e = validarStep2(); if (e) { setError(e); return }
-      if (!(await cuitDisponible())) { setError('Ese CUIT ya está registrado. Si es tuyo, ingresá con tu cuenta o recuperá la contraseña.'); return }
+      if (modo === 'invitacion') { setStep(4); return }   // los roles los define la empresa
+      if (!(await cuitDisponible())) { setCuitTomado(true); return }
       setStep(3)
     }
     else if (step === 3) { const e = validarStep3(); if (e) { setError(e); return }; setStep(4) }
@@ -89,12 +109,14 @@ export default function Registro() {
             nombre: form.nombre,
             apellido: form.apellido,
             razon_social: form.razon_social,
-            cuit: limpiarCuit(form.cuit),
+            cuit: modo === 'invitacion' ? '' : limpiarCuit(form.cuit),
             telefono: form.telefono,
             domicilio: form.domicilio,
             localidad: form.localidad,
             provincia: form.provincia,
-            roles,
+            roles: modo === 'nueva' ? roles : [],
+            modo,
+            invitacion: modo === 'invitacion' ? tokenInv : undefined,
           }
         }
       })
@@ -107,7 +129,9 @@ export default function Registro() {
       setRegistrado(true)
     } catch (e) {
       setError(e.message?.toLowerCase().includes('already registered')
-        ? 'Ese email ya está registrado. Ingresá o recuperá la contraseña.'
+        ? (modo === 'invitacion'
+            ? 'Ese email ya tiene usuario. Ingresá con él y vas a poder aceptar la invitación.'
+            : 'Ese email ya está registrado. Ingresá o recuperá la contraseña.')
         : e.message)
     } finally {
       setLoading(false)
@@ -130,6 +154,27 @@ export default function Registro() {
           <p className="text-sm text-gray-500 mb-4">
             Te enviamos un link de confirmación a <strong>{form.email}</strong>. Hacé clic ahí para activar tu cuenta.
           </p>
+          {modo === 'solicitud' && (
+            <p className="text-xs text-gray-500 mb-4 bg-orange-50 border border-orange-200 rounded-[10px] p-2.5">
+              Después de confirmar, el titular de la empresa tiene que aprobar tu acceso. Te avisamos cuando lo haga.
+            </p>
+          )}
+          {modo === 'invitacion' && inv && (
+            <p className="text-xs text-gray-500 mb-4">Al confirmar vas a entrar directo a <strong>{inv.razon_social}</strong>.</p>
+          )}
+          <Link to="/login" className="text-verde-700 font-semibold text-sm">Ir a iniciar sesión</Link>
+        </div>
+      </div>
+    )
+  }
+
+  if (modo === 'invitacion' && inv === false) {
+    return (
+      <div className="min-h-screen bg-verde-800 flex flex-col items-center justify-center px-6 py-10">
+        <div className="bg-white rounded-2xl p-6 w-full max-w-sm text-center">
+          <div className="text-4xl mb-3">⌛</div>
+          <h2 className="text-base font-bold text-gray-900 mb-2">Invitación no válida</h2>
+          <p className="text-sm text-gray-500 mb-4">El link venció o ya fue usado. Pedile al titular de la cuenta un link nuevo.</p>
           <Link to="/login" className="text-verde-700 font-semibold text-sm">Ir a iniciar sesión</Link>
         </div>
       </div>
@@ -159,13 +204,21 @@ export default function Registro() {
       </div>
 
       <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
+        {modo === 'invitacion' && inv && (
+          <div className="bg-verde-50 border border-verde-100 rounded-[10px] p-3 text-xs text-gray-700 mb-4">
+            👥 <strong>{inv.razon_social}</strong> te invitó a sumarte a su cuenta en Carreta.
+          </div>
+        )}
+        {modo === 'invitacion' && inv === undefined && (
+          <div className="text-xs text-gray-400 mb-4 text-center">Cargando invitación…</div>
+        )}
 
         {/* STEP 1 */}
         {step === 1 && (
           <>
             <h2 className="text-base font-bold text-gray-900 mb-4">Credenciales</h2>
-            <input type="email" placeholder="Email *" value={form.email}
-              onChange={e => setF('email', e.target.value)} className={cls} />
+            <input type="email" placeholder="Email *" value={form.email} readOnly={modo === 'invitacion'}
+              onChange={e => setF('email', e.target.value)} className={`${cls} ${modo === 'invitacion' ? 'text-gray-500' : ''}`} />
             <input type="password" placeholder="Contraseña * (mín. 6 caracteres)" value={form.password}
               onChange={e => setF('password', e.target.value)} className={cls} />
             <input type="password" placeholder="Repetir contraseña *" value={form.password2}
@@ -185,16 +238,19 @@ export default function Registro() {
                 onChange={e => setF('apellido', e.target.value)}
                 className="border border-gray-200 rounded-[10px] px-3 py-2.5 text-sm bg-gray-50 focus:outline-none focus:border-verde-600 font-[Inter]" />
             </div>
+            {modo !== 'invitacion' && <>
             <input type="text" placeholder="Razón social *" value={form.razon_social}
               onChange={e => setF('razon_social', e.target.value)}
               className={cls} />
             <p className="text-[10px] text-gray-400 -mt-2 mb-3">Persona física: tu nombre y apellido. Empresa: nombre legal.</p>
             <input type="text" placeholder="CUIT * (11 dígitos, sin guiones)" value={form.cuit}
-              onChange={e => setF('cuit', e.target.value.replace(/\D/g, ''))}
+              onChange={e => { setF('cuit', e.target.value.replace(/\D/g, '')); setCuitTomado(false) }}
               className={cls} maxLength={11} />
+            </>}
             <input type="tel" placeholder="Teléfono *" value={form.telefono}
               onChange={e => setF('telefono', e.target.value)}
               className={cls} />
+            {modo !== 'invitacion' && <>
             <input type="text" placeholder="Domicilio legal *" value={form.domicilio}
               onChange={e => setF('domicilio', e.target.value)}
               className={cls} />
@@ -208,6 +264,22 @@ export default function Registro() {
             <div className="bg-yellow-50 border border-yellow-200 rounded-[10px] p-3 text-xs text-yellow-700">
               ⚠ La validación con RENAPER se habilitará próximamente.
             </div>
+            </>}
+
+            {cuitTomado && (
+              <div className="bg-orange-50 border border-orange-200 rounded-[10px] p-3 mt-3">
+                <div className="text-xs text-orange-800 font-semibold mb-1">Ese CUIT ya tiene cuenta en Carreta</div>
+                <p className="text-xs text-gray-600 mb-2">
+                  Si es tuyo, ingresá con tu usuario o recuperá la contraseña.
+                  Si trabajás en esa empresa, pedí acceso: el titular lo aprueba y operás con tu propio usuario.
+                </p>
+                <button onClick={() => { setModo('solicitud'); setCuitTomado(false); setError(''); setStep(4) }}
+                  className="w-full bg-orange-500 text-white rounded-[10px] py-2 text-xs font-bold hover:bg-orange-600 mb-1.5">
+                  👥 Pedir acceso a esta empresa
+                </button>
+                <Link to="/login" className="block text-center text-xs text-verde-700 font-semibold">Es mío: ingresar</Link>
+              </div>
+            )}
           </>
         )}
 
@@ -243,6 +315,12 @@ export default function Registro() {
           <>
             <h2 className="text-base font-bold text-gray-900 mb-1">Confirmá tus datos</h2>
             <p className="text-xs text-gray-500 mb-4">Revisá todo antes de crear tu cuenta.</p>
+            {modo === 'solicitud' && (
+              <div className="bg-orange-50 border border-orange-200 rounded-[10px] p-3 text-xs text-gray-700 mb-3">
+                👥 Vas a <strong>pedir acceso</strong> a la empresa con CUIT <strong>{form.cuit}</strong>.
+                El titular tiene que aprobarte antes de que puedas operar.
+              </div>
+            )}
             <div className="bg-gray-50 rounded-[10px] px-3 py-2 mb-3">
               <div className="text-[11px] font-semibold text-gray-400 mb-1">CREDENCIALES</div>
               <Fila label="Email" value={form.email} />
@@ -251,16 +329,26 @@ export default function Registro() {
             <div className="bg-gray-50 rounded-[10px] px-3 py-2 mb-3">
               <div className="text-[11px] font-semibold text-gray-400 mb-1">DATOS PERSONALES</div>
               <Fila label="Nombre" value={`${form.nombre} ${form.apellido}`} />
-              <Fila label="Razón social" value={form.razon_social} />
-              <Fila label="CUIT" value={form.cuit} />
+              {modo === 'nueva' && <Fila label="Razón social" value={form.razon_social} />}
+              {modo !== 'invitacion' && <Fila label="CUIT" value={form.cuit} />}
               <Fila label="Teléfono" value={form.telefono} />
-              <Fila label="Domicilio" value={form.domicilio} />
-              <Fila label="Localidad" value={`${form.localidad}, ${form.provincia}`} />
+              {modo !== 'invitacion' && <>
+                <Fila label="Domicilio" value={form.domicilio} />
+                <Fila label="Localidad" value={`${form.localidad}, ${form.provincia}`} />
+              </>}
             </div>
-            <div className="bg-gray-50 rounded-[10px] px-3 py-2 mb-4">
-              <div className="text-[11px] font-semibold text-gray-400 mb-1">ROLES</div>
-              <Fila label="Roles" value={roles.map(r => r.charAt(0).toUpperCase() + r.slice(1)).join(' + ')} />
-            </div>
+            {modo === 'nueva' && (
+              <div className="bg-gray-50 rounded-[10px] px-3 py-2 mb-4">
+                <div className="text-[11px] font-semibold text-gray-400 mb-1">ROLES</div>
+                <Fila label="Roles" value={roles.map(r => r.charAt(0).toUpperCase() + r.slice(1)).join(' + ')} />
+              </div>
+            )}
+            {modo === 'invitacion' && inv && (
+              <div className="bg-gray-50 rounded-[10px] px-3 py-2 mb-4">
+                <div className="text-[11px] font-semibold text-gray-400 mb-1">EMPRESA</div>
+                <Fila label="Te sumás a" value={inv.razon_social} />
+              </div>
+            )}
             <div className="flex justify-center mb-3">
               <HCaptcha
                 sitekey={HCAPTCHA_SITE_KEY}
@@ -282,12 +370,16 @@ export default function Registro() {
         ) : (
           <button onClick={registrar} disabled={loading || !captchaToken}
             className="w-full bg-verde-700 text-white rounded-[10px] py-2.5 text-sm font-bold hover:bg-verde-800 transition-colors disabled:opacity-60 mb-3">
-            {loading ? 'Creando cuenta…' : '✓ Confirmar y crear cuenta'}
+            {loading ? 'Enviando…' : modo === 'solicitud' ? '✓ Crear usuario y pedir acceso' : '✓ Confirmar y crear cuenta'}
           </button>
         )}
 
         {step > 1 && (
-          <button onClick={() => { setStep(s => s - 1); setError('') }}
+          <button onClick={() => {
+              setError('')
+              if (step === 4 && modo !== 'nueva') { if (modo === 'solicitud') setModo('nueva'); setStep(2) }
+              else setStep(s => s - 1)
+            }}
             className="w-full text-xs text-gray-400 hover:text-gray-600 mb-2">
             ← Volver a editar
           </button>

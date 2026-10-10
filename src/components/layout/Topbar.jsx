@@ -113,6 +113,7 @@ export default function Topbar({ title, showBack, backTo, accent = 'verde' }) {
                   <div key={n.id}
                     onClick={() => {
                       setShowPanel(false)
+                      if (['solicitud_acceso', 'equipo_alta'].includes(n.tipo)) { navigate('/equipo'); return }
                       if (!n.pedido_id) return
                       if (rolActual === 'transportista' && ['pedido_nuevo', 'oferta_reactivada'].includes(n.tipo))
                         navigate(`/transportista/disponible/${n.pedido_id}`)

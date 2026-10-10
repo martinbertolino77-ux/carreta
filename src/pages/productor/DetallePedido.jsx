@@ -26,7 +26,7 @@ import ModalCalificar from '../../components/pedidos/ModalCalificar'
 import MapRuta from '../../components/ui/MapRuta'
 
 export default function DetallePedido() {
-  const { usuario } = useAuth()
+  const { usuario, cuenta } = useAuth()
   const { id } = useParams()
   const navigate = useNavigate()
   const [pedido, setPedido] = useState(null)
@@ -126,15 +126,14 @@ export default function DetallePedido() {
       .select(`
         *,
         establecimientos(nombre, localidad, provincia, departamento, link_maps, telefono),
-        productores(usuario_id),
+        productores(usuario_id, cuenta_id),
         transportista_directo_info:transportistas!pedidos_transportista_directo_fkey(id, usuario_id, usuarios(nombre, apellido, razon_social, telefono, cuit))
       `)
       .eq('id', id)
       .single()
 
-    // Solo el productor dueño puede ver este detalle
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!p || p.productores?.usuario_id !== session?.user?.id) {
+    // Solo la cuenta dueña del pedido puede ver este detalle
+    if (!p || !cuenta || p.productores?.cuenta_id !== cuenta.id) {
       setPedido(null)
       setLoading(false)
       return

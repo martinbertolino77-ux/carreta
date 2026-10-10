@@ -9,3 +9,8 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/generar-historial/deno.json"
 entrypoint = "./functions/generar-historial/index.ts"
+
+[functions.send-email-auth]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/send-email-auth/index.ts"

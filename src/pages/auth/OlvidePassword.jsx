@@ -8,6 +8,7 @@ const HCAPTCHA_SITE_KEY = '06e4ad0e-ff76-469c-a496-0c929448e82e'
 export default function OlvidePassword() {
   const [email, setEmail]     = useState('')
   const [enviado, setEnviado] = useState(false)
+  const [demorado, setDemorado] = useState(false)   // el correo tardó: suele llegar igual
   const [error, setError]     = useState('')
   const [loading, setLoading] = useState(false)
   const [captchaToken, setCaptchaToken] = useState(null)
@@ -29,8 +30,12 @@ export default function OlvidePassword() {
         setError('Hiciste muchos intentos seguidos. Esperá unos minutos y probá de nuevo.')
       else if (m.includes('captcha'))
         setError('Falló el captcha. Marcalo de nuevo y reintentá.')
-      else if (err.status === 504 || m.includes('deadline') || m.includes('sending'))
-        setError('El servidor de correo no respondió. Probá en unos minutos o escribinos a soporte@carreta.com.ar.')
+      else if (err.status === 504 || m.includes('deadline')) {
+        // El servidor de correo tardó en responder, pero en general el mail sale igual
+        setDemorado(true); setEnviado(true)
+      }
+      else if (m.includes('sending'))
+        setError('No se pudo enviar el mail. Probá en unos minutos o escribinos a soporte@carreta.com.ar.')
       else
         setError(`No pudimos enviar el email: ${err.message}`)
       captchaRef.current?.resetCaptcha()
@@ -96,7 +101,8 @@ export default function OlvidePassword() {
             </div>
             <h1 className="text-base font-bold text-gray-900 text-center mb-2">Email enviado</h1>
             <p className="text-xs text-gray-500 text-center mb-4">
-              Revisá tu bandeja de entrada. El link expira en 1 hora.
+              Revisá tu bandeja de entrada (y spam). El link expira en 1 hora.
+              {demorado && <><br /><br />El servidor de correo tardó en responder: el mail puede demorar unos minutos. Si no llega en 10 minutos, probá de nuevo.</>}
             </p>
           </>
         )}

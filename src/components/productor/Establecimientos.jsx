@@ -20,7 +20,7 @@ function Grupo({ titulo, items, abierto, onToggle, render }) {
   )
 }
 
-export default function Establecimientos({ establecimientos, onAgregar, onEditar, onToggleActivo }) {
+export default function Establecimientos({ establecimientos, onAgregar, onEditar, onToggleActivo, soloVer = false }) {
   const [abierta, setAbierta] = useState(false)
   const [busca, setBusca] = useState('')
   const [abiertos, setAbiertos] = useState({})
@@ -66,8 +66,8 @@ export default function Establecimientos({ establecimientos, onAgregar, onEditar
           {e.link_maps && <a href={e.link_maps} target="_blank" rel="noreferrer" className="text-xs text-azul-600 mt-0.5 block">Ver en Maps</a>}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-          <button onClick={() => onEditar(e)} className="text-xs text-azul-600 font-medium">Editar</button>
-          <Toggle value={e.activo} onChange={() => onToggleActivo(e.id, e.activo)} />
+          {!soloVer && <button onClick={() => onEditar(e)} className="text-xs text-azul-600 font-medium">Editar</button>}
+          {!soloVer && <Toggle value={e.activo} onChange={() => onToggleActivo(e.id, e.activo)} />}
         </div>
       </div>
     </div>
@@ -89,9 +89,9 @@ export default function Establecimientos({ establecimientos, onAgregar, onEditar
       </button>
 
       {abierta && (<>
-        <div className="flex justify-end mt-2 mb-2">
+        {!soloVer && <div className="flex justify-end mt-2 mb-2">
           <button onClick={onAgregar} className="text-xs text-azul-600 font-semibold">+ Agregar establecimiento</button>
-        </div>
+        </div>}
 
         {establecimientos.length > 5 && (
           <input value={busca} onChange={e => setBusca(e.target.value)}
@@ -103,7 +103,7 @@ export default function Establecimientos({ establecimientos, onAgregar, onEditar
           <div className="text-center py-4">
             <div className="text-2xl mb-1 opacity-40">🏡</div>
             <div className="text-xs text-gray-400">No tenés establecimientos cargados</div>
-            <button onClick={onAgregar} className="text-xs text-verde-700 font-semibold mt-1">Agregar el primero</button>
+            {!soloVer && <button onClick={onAgregar} className="text-xs text-verde-700 font-semibold mt-1">Agregar el primero</button>}
           </div>
         ) : filtrada.length === 0 ? (
           <div className="text-xs text-gray-400 text-center py-3">Sin resultados para "{busca}"</div>

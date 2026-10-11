@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import MapPicker from '../../components/ui/MapPicker'
 import { useAuth } from '../../context/AuthContext'
+import { puede } from '../../utils/permisos'
 import Shell, { Body } from '../../components/layout/Shell'
 import Topbar from '../../components/layout/Topbar'
 import BottomTabs from '../../components/layout/BottomTabs'
@@ -188,7 +189,7 @@ export default function Perfil() {
           )}
         </Card>
 
-        <Establecimientos establecimientos={establecimientos}
+        <Establecimientos establecimientos={establecimientos} soloVer={!puede(cuenta, 'establecimientos')}
           onAgregar={abrirNuevo} onEditar={abrirEditar} onToggleActivo={toggleActivo} />
 
         <Card className="mb-3">

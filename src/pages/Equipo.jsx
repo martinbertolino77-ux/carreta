@@ -7,6 +7,7 @@ import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
 import Modal from '../components/ui/Modal'
+import { ACCIONES, puede, limitado } from '../utils/permisos'
 import { formatCuit } from '../utils/format'
 
 // master: administra todo · operador: opera, no administra el equipo · lectura: solo ve
@@ -18,8 +19,24 @@ const PERMISOS = [
 const COLOR_PERMISO = { master: 'purple', operador: 'blue', lectura: 'gray' }
 const NOMBRE_PERMISO = { master: 'Master', operador: 'Operador', lectura: 'Solo lectura' }
 
+// Acciones que aplican a la empresa (según sus roles), sin repetir "ver precios"
+function accionesDe(roles = []) {
+  const vistas = new Set()
+  return [...(roles.includes('productor') ? ACCIONES.productor : []), ...(roles.includes('transportista') ? ACCIONES.transportista : [])]
+    .filter(a => !vistas.has(a.id) && vistas.add(a.id))
+}
+
 // Qué puede hacer cada permiso, en nombre de la empresa (para avisar antes de darlo)
-function alcance(permiso, roles = []) {
+function alcance(permiso, roles = [], permisos = {}) {
+  if (permiso === 'operador') {
+    const c = { permiso: 'operador', permisos }
+    const lista = accionesDe(roles)
+    const no = lista.filter(a => !puede(c, a.id)).map(a => a.label.toLowerCase())
+    return {
+      puede: lista.filter(a => puede(c, a.id)).map(a => a.label.toLowerCase()),
+      nota: 'No puede administrar el equipo ni cambiar los datos de la empresa.' + (no.length ? ` Tampoco: ${no.join(', ')}.` : ''),
+    }
+  }
   const prod = roles.includes('productor'), transp = roles.includes('transportista')
   const opera = [
     ...(prod ? ['publicar, modificar y cancelar pedidos', 'aceptar ofertas y comprometer a la empresa con transportistas'] : []),
@@ -42,6 +59,8 @@ export default function Equipo() {
   const esMaster = cuenta?.permiso === 'master'
 
   const [miembros, setMiembros]       = useState([])
+  const [editPerm, setEditPerm]       = useState(null)   // { titulo, permisos, guardar }
+  const [invPermisos, setInvPermisos] = useState({})
   const [solicitudes, setSolicitudes] = useState([])
   const [invitaciones, setInvitaciones] = useState([])
   const [permisoSol, setPermisoSol]   = useState({})       // id solicitud → permiso elegido
@@ -64,11 +83,14 @@ export default function Equipo() {
   async function cargar() {
     if (!cuenta) return
     const { data: m } = await supabase.rpc('equipo_miembros', { p_cuenta: cuenta.id })
-    setMiembros(m || [])
+    // permisos a medida de cada integrante
+    const { data: pm } = await supabase.from('miembros').select('usuario_id, permisos').eq('cuenta_id', cuenta.id)
+    const porUsuario = Object.fromEntries((pm || []).map(x => [x.usuario_id, x.permisos || {}]))
+    setMiembros((m || []).map(x => ({ ...x, permisos: porUsuario[x.usuario_id] || {} })))
     if (esMaster) {
       const [{ data: s }, { data: i }] = await Promise.all([
         supabase.rpc('equipo_solicitudes', { p_cuenta: cuenta.id }),
-        supabase.from('invitaciones').select('id, email, permiso, token, vence_en')
+        supabase.from('invitaciones').select('id, email, permiso, permisos, token, vence_en')
           .eq('cuenta_id', cuenta.id).is('aceptada_en', null).order('created_at', { ascending: false }),
       ])
       setSolicitudes(s || [])
@@ -140,8 +162,12 @@ export default function Equipo() {
     })
     setOcupado(null)
     if (error) { setError(error.message); return }
+    if (invPermiso === 'operador' && limitado(invPermisos)) {
+      const { error: e2 } = await supabase.rpc('ajustar_permisos_invitacion', { p_token: data, p_permisos: invPermisos })
+      if (e2) { setError(e2.message); return }
+    }
     setLinkInv({ email: invEmail.trim().toLowerCase(), url: linkDe(data), token: data })
-    setInvEmail('')
+    setInvEmail(''); setInvPermisos({})
     cargar()
     mandarMail(data)
   }
@@ -175,6 +201,11 @@ export default function Equipo() {
           <div className="mt-1.5 text-xs text-gray-500">
             Tu permiso: <Badge color={COLOR_PERMISO[cuenta?.permiso]}>{NOMBRE_PERMISO[cuenta?.permiso]}</Badge>
           </div>
+          {cuenta?.permiso === 'operador' && limitado(cuenta.permisos) && (
+            <div className="mt-1.5 text-[11px] text-orange-700">
+              No podés: {accionesDe(cuenta.roles).filter(a => !puede(cuenta, a.id)).map(a => a.label.toLowerCase()).join(', ')}.
+            </div>
+          )}
         </Card>
 
         {error && <div className="bg-red-50 border border-red-200 rounded-[10px] p-2.5 text-xs text-red-700 mb-2.5">{error}</div>}
@@ -219,7 +250,10 @@ export default function Equipo() {
                   <div className="text-xs text-gray-500 truncate">{m.email}</div>
                   {m.telefono && <div className="text-xs text-gray-400">{m.telefono}</div>}
                 </div>
-                <Badge color={COLOR_PERMISO[m.permiso]}>{NOMBRE_PERMISO[m.permiso]}</Badge>
+                <div className="flex flex-col items-end gap-1">
+                  <Badge color={COLOR_PERMISO[m.permiso]}>{NOMBRE_PERMISO[m.permiso]}</Badge>
+                  {m.permiso === 'operador' && limitado(m.permisos) && <span className="text-[10px] text-orange-600 font-semibold">Permisos limitados</span>}
+                </div>
               </div>
               {esMaster && (
                 <div className="flex items-center gap-2 mt-2">
@@ -228,6 +262,16 @@ export default function Equipo() {
                     className="border border-gray-200 rounded-[8px] px-2 py-1 text-xs bg-white">
                     {PERMISOS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
                   </select>
+                  {m.permiso === 'operador' && (
+                    <button disabled={!!ocupado} className="text-xs text-azul-600 font-semibold"
+                      onClick={() => setEditPerm({
+                        titulo: `Permisos de ${m.nombre} ${m.apellido}`, permisos: m.permisos || {},
+                        guardar: (p) => ejecutar(`pp-${m.usuario_id}`, () => supabase.rpc('cambiar_permisos_operador', {
+                          p_cuenta: cuenta.id, p_usuario: m.usuario_id, p_permisos: p })),
+                      })}>
+                      Ajustar permisos
+                    </button>
+                  )}
                   {!yo && (
                     <button onClick={() => quitar(m)} disabled={!!ocupado}
                       className="text-xs text-red-600 hover:text-red-800 ml-auto">Quitar</button>
@@ -255,6 +299,13 @@ export default function Equipo() {
                   className="border border-gray-200 rounded-[8px] px-2 py-1 text-xs bg-white">
                   {PERMISOS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
                 </select>
+                {invPermiso === 'operador' && (
+                  <button className="text-xs text-azul-600 font-semibold"
+                    onClick={() => setEditPerm({ titulo: 'Permisos del invitado', permisos: invPermisos,
+                      guardar: async (p) => setInvPermisos(p) })}>
+                    {limitado(invPermisos) ? 'Permisos limitados ✎' : 'Ajustar permisos'}
+                  </button>
+                )}
               </div>
               <Button disabled={ocupado === 'invitar'} onClick={invitar}>
                 {ocupado === 'invitar' ? 'Generando…' : 'Invitar'}
@@ -293,7 +344,7 @@ export default function Equipo() {
                         <div className="min-w-0">
                           <div className="text-xs font-semibold text-gray-800 truncate">{i.email}</div>
                           <div className="text-[10px] text-gray-400">
-                            {NOMBRE_PERMISO[i.permiso]} · {vencida ? 'Vencida' : `Vence ${fecha(i.vence_en)}`}
+                            {NOMBRE_PERMISO[i.permiso]}{i.permiso === 'operador' && limitado(i.permisos) ? ' (limitado)' : ''} · {vencida ? 'Vencida' : `Vence ${fecha(i.vence_en)}`}
                           </div>
                         </div>
                         <div className="flex gap-3 flex-shrink-0">
@@ -327,10 +378,12 @@ export default function Equipo() {
         )}
       </Body>
 
+      <PermisosModal datos={editPerm} roles={cuenta?.roles} onCerrar={() => setEditPerm(null)} />
+
       <Modal open={!!aviso} onClose={() => setAviso(null)}
         title={aviso ? `Dar permiso ${NOMBRE_PERMISO[aviso.permiso]}` : ''}>
         {aviso && (() => {
-          const a = alcance(aviso.permiso, cuenta?.roles)
+          const a = alcance(aviso.permiso, cuenta?.roles, aviso.accion === 'Invitar' ? invPermisos : (aviso.permisos || {}))
           return (
             <>
               <p className="text-sm text-gray-600 mb-2">
@@ -354,5 +407,44 @@ export default function Equipo() {
         })()}
       </Modal>
     </Shell>
+  )
+}
+
+// Casillas de permisos de un Operador
+function PermisosModal({ datos, roles, onCerrar }) {
+  const [p, setP] = useState({})
+  const [guardando, setGuardando] = useState(false)
+  useEffect(() => { if (datos) setP(datos.permisos || {}) }, [datos])
+  if (!datos) return null
+  const lista = accionesDe(roles)
+  const c = { permiso: 'operador', permisos: p }
+  const cambiar = (id, valor) => setP(prev => {
+    const n = { ...prev }
+    if (valor) delete n[id]; else n[id] = false
+    if (id === 'ver_precios' && valor) { delete n.ofertar; delete n.aceptar_ofertas }
+    return n
+  })
+  const guardar = async () => { setGuardando(true); await datos.guardar(p); setGuardando(false); onCerrar() }
+  return (
+    <Modal open onClose={onCerrar} title={datos.titulo}>
+      <p className="text-xs text-gray-500 mb-3">Destildá lo que no querés que haga. El resto queda permitido.</p>
+      {lista.map(a => {
+        const bloqueada = a.precio && p.ver_precios === false
+        return (
+          <label key={a.id} className={`flex items-start gap-2.5 py-2 border-b border-gray-50 ${bloqueada ? 'opacity-50' : ''}`}>
+            <input type="checkbox" className="mt-0.5 w-4 h-4 accent-green-700" disabled={bloqueada}
+              checked={puede(c, a.id)} onChange={e => cambiar(a.id, e.target.checked)} />
+            <span className="text-sm text-gray-800">
+              {a.label}
+              {bloqueada && <span className="block text-[11px] text-gray-400">Necesita "Ver precios y montos"</span>}
+            </span>
+          </label>
+        )
+      })}
+      <div className="flex gap-2 mt-4">
+        <Button variant="secondary" onClick={onCerrar}>Cancelar</Button>
+        <Button onClick={guardar} disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar'}</Button>
+      </div>
+    </Modal>
   )
 }

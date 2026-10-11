@@ -22,7 +22,7 @@ function Grupo({ titulo, items, abierto, onToggle, render, aviso }) {
   )
 }
 
-export default function Flota({ chasis, acoplados, choferes, onAgregar, onEditar, onToggleActivo }) {
+export default function Flota({ chasis, acoplados, choferes, onAgregar, onEditar, onToggleActivo, soloVer = false }) {
   const [tab, setTab] = useState('chasis')
   const [busca, setBusca] = useState('')
   const [abiertos, setAbiertos] = useState({})   // clave de grupo → abierto
@@ -82,8 +82,8 @@ export default function Flota({ chasis, acoplados, choferes, onAgregar, onEditar
         </>)}
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
-        <button onClick={() => onEditar(tab, x)} className="text-xs text-azul-600">Editar</button>
-        <Toggle value={x.activo} onChange={() => onToggleActivo(tabla, x.id, x.activo)} />
+        {!soloVer && <button onClick={() => onEditar(tab, x)} className="text-xs text-azul-600">Editar</button>}
+        {!soloVer && <Toggle value={x.activo} onChange={() => onToggleActivo(tabla, x.id, x.activo)} />}
       </div>
     </div>
   )
@@ -104,9 +104,9 @@ export default function Flota({ chasis, acoplados, choferes, onAgregar, onEditar
 
       {abierta && (<>
       <div className="flex justify-end mt-2 mb-2">
-        <button onClick={() => onAgregar(tab)} className="text-xs text-azul-600 font-semibold">
+        {!soloVer && <button onClick={() => onAgregar(tab)} className="text-xs text-azul-600 font-semibold">
           + Agregar {tab === 'chasis' ? 'chasis' : tab === 'acoplados' ? 'remolque' : 'chofer'}
-        </button>
+        </button>}
       </div>
 
       <div className="flex gap-1 bg-gray-100 rounded-[10px] p-1 mb-2.5">

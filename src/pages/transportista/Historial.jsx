@@ -10,6 +10,12 @@ import Button from '../../components/ui/Button'
 import Field, { Input } from '../../components/ui/Field'
 import Route from '../../components/ui/Route'
 import { formatNroPedido, formatFecha, formatNum } from '../../utils/format'
+import { useAuth } from '../../context/AuthContext'
+import { puede } from '../../utils/permisos'
+
+// Sin permiso de ver precios: se borran antes de mostrar o descargar
+const SIN_PRECIO = { precio_acordado: null, monto_final: null, monto_acordado: null, precio_tn: null, precio_km: null }
+const limpiarPrecios = (rows, ver) => ver ? (rows || []) : (rows || []).map(r => ({ ...r, ...SIN_PRECIO }))
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
@@ -18,6 +24,8 @@ const COL_WIDTHS_RESUMEN = [20,16,16,16,20,18,18]
 
 export default function HistorialTransp() {
   const navigate = useNavigate()
+  const { cuenta } = useAuth()
+  const verPrecios = puede(cuenta, 'ver_precios')
   const [items, setItems] = useState([])
   const [detalle, setDetalle] = useState([])
   const [loading, setLoading] = useState(true)
@@ -32,8 +40,8 @@ export default function HistorialTransp() {
       supabase.rpc('historial_transportista', { p_desde: desde || null, p_hasta: hasta || null }),
       supabase.rpc('historial_transportista_detalle', { p_desde: desde || null, p_hasta: hasta || null }),
     ])
-    setItems(data || [])
-    setDetalle(det || [])
+    setItems(limpiarPrecios(data, verPrecios))
+    setDetalle(limpiarPrecios(det, verPrecios))
     setLoading(false)
   }
 

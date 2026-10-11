@@ -17,8 +17,12 @@ import { formatNroPedido, formatFecha, formatNum } from '../../utils/format'
 import { tituloPedido, iconoPedido, bgPedido } from '../../utils/pedido'
 import Contador from '../../components/ui/Contador'
 import { EQUIPOS, EQUIPOS_POR_ACTIVIDAD } from '../../utils/constants'
+import { useAuth } from '../../context/AuthContext'
+import { puede } from '../../utils/permisos'
 
 export default function DetalleDisponible() {
+  const { cuenta } = useAuth()
+  const puedeOfertar = puede(cuenta, 'ofertar')
   const { id } = useParams()
   const navigate = useNavigate()
   const [pedido, setPedido] = useState(null)
@@ -244,7 +248,7 @@ export default function DetalleDisponible() {
                     Ir al viaje →
                   </Button>
                 )}
-                {['enviada','en_pausa'].includes(miOferta.estado) && (
+                {['enviada','en_pausa'].includes(miOferta.estado) && puedeOfertar && (
                   <Button variant="ghost" onClick={retirarOferta} className="mb-2">
                     Retirar oferta
                   </Button>
@@ -252,7 +256,7 @@ export default function DetalleDisponible() {
               </>
             )
           })()
-        ) : ['esperando_ofertas','con_ofertas'].includes(pedido.estado) && (
+        ) : ['esperando_ofertas','con_ofertas'].includes(pedido.estado) && puedeOfertar && (
           <Button variant="azul" onClick={() => setModalOfertar(true)} className="mb-2">
             🙋 Postularme para este pedido
           </Button>

@@ -11,6 +11,11 @@ import Button from '../../components/ui/Button'
 import Field, { Input } from '../../components/ui/Field'
 import Route from '../../components/ui/Route'
 import { formatNroPedido, formatFecha, formatNum } from '../../utils/format'
+import { puede } from '../../utils/permisos'
+
+// Sin permiso de ver precios: se borran antes de mostrar o descargar
+const SIN_PRECIO = { precio_acordado: null, monto_final: null, monto_acordado: null, precio_tn: null, precio_km: null }
+const limpiarPrecios = (rows, ver) => ver ? (rows || []) : (rows || []).map(r => ({ ...r, ...SIN_PRECIO }))
 
 const COL_WIDTHS_DETALLE = [12, 14, 20, 24, 24, 16, 14, 22, 20, 14, 16, 14, 15, 16, 14, 13, 14, 12]
 const COL_WIDTHS_RESUMEN = [12, 14, 20, 24, 24, 16, 16, 16, 14, 30, 15, 16, 14, 13, 14, 14, 12, 20]
@@ -24,7 +29,8 @@ function aplicarFormato(ws, headers, colWidths) {
 
 export default function Historial() {
   const navigate = useNavigate()
-  const { usuario } = useAuth()
+  const { usuario, cuenta } = useAuth()
+  const verPrecios = puede(cuenta, 'ver_precios')
   const [items, setItems] = useState([])
   const [transportistas, setTransportistas] = useState([])
   const [loading, setLoading] = useState(true)
@@ -39,8 +45,8 @@ export default function Historial() {
       supabase.rpc('historial_productor', { p_desde: desde || null, p_hasta: hasta || null }),
       supabase.rpc('historial_productor_transportista', { p_desde: desde || null, p_hasta: hasta || null }),
     ])
-    setItems(data || [])
-    setTransportistas(transp || [])
+    setItems(limpiarPrecios(data, verPrecios))
+    setTransportistas(limpiarPrecios(transp, verPrecios))
     setLoading(false)
   }
 
@@ -54,7 +60,7 @@ export default function Historial() {
 
     const headersDetalle = ['Nro. Pedido','Tipo de carga','Establecimiento','Origen','Destino','Fecha publicación','Fecha descarga','Transportista','Chofer','Dominio chasis','Dominio remolque','Kilos asignados','Precio acordado','Forma de pago','Monto final','Estado','Calif. recibida','Calif. dada']
 
-    const filasDetalle = (detalle || []).map(r => [
+    const filasDetalle = limpiarPrecios(detalle, verPrecios).map(r => [
       formatNroPedido(r.numero), r.tipo_carga, r.establecimiento,
       `${r.origen_localidad}, ${r.origen_provincia}`, `${r.destino_localidad}, ${r.destino_provincia}`,
       r.fecha_publicacion, r.fecha_descarga,

@@ -23,9 +23,11 @@ import MapRuta from '../../components/ui/MapRuta'
 import CalifDisplay from '../../components/ui/CalifDisplay'
 import ModalCalificar from '../../components/pedidos/ModalCalificar'
 import { useAuth } from '../../context/AuthContext'
+import { puede } from '../../utils/permisos'
 
 export default function DetallePedidoTransp() {
   const { usuario, cuenta, cuentas, cambiarCuenta } = useAuth()
+  const ok = (a) => puede(cuenta, a)
   const { id } = useParams()
   const navigate = useNavigate()
   const [pedido, setPedido] = useState(null)
@@ -336,7 +338,7 @@ export default function DetallePedidoTransp() {
       .eq('pedido_id', id).eq('transportista_id', transportista?.id)).data?.map(d => d.id) || []
     const { data: pend } = await supabase.from('camiones_viaje').select('id')
       .in('datos_operativos_id', doIds).is('fecha_descarga', null).eq('estado', 'activo')
-    if (!pend?.length) setModalMonto(true)
+    if (!pend?.length && ok('ver_precios')) setModalMonto(true)
     else await cargar(true)
   }
 
@@ -477,14 +479,14 @@ export default function DetallePedidoTransp() {
           </Banner>
         )}
 
-        {etapa === 'confirmado' && !datosOp && (
+        {etapa === 'confirmado' && !datosOp && ok('camiones') && (
           <Button variant="azul" onClick={() => abrirModalDatosOp(false)} className="mb-3">
             📋 Enviar datos operativos
           </Button>
         )}
 
         {/* Faltan camiones (uno salió en otro viaje o se quitó) */}
-        {etapa === 'confirmado' && datosOp && (
+        {etapa === 'confirmado' && datosOp && ok('camiones') && (
           <>
             <Banner color="orange" title="⚠️ Completá los camiones" className="mb-3">
               {camionesViaje.length < (miOferta?.camiones_aceptados || 1)
@@ -544,7 +546,7 @@ export default function DetallePedidoTransp() {
                   {' · '}{VEHICULOS[equipoDe(cv.chasis?.tipo, cv.acoplados?.tipo)] || ''}
                   {(cv.chasis?.tara_kg || cv.acoplados?.tara_kg) ? ` · tara ${Number(cv.chasis?.tara_kg || 0) + Number(cv.acoplados?.tara_kg || 0)} kg` : ''}
                 </div>
-                {etapa === 'confirmado' && (
+                {etapa === 'confirmado' && ok('camiones') && (
                   <button onClick={() => quitarCamion(cv.id)} className="text-[11px] text-red-600 font-semibold mt-0.5">
                     Quitar camión
                   </button>
@@ -560,7 +562,7 @@ export default function DetallePedidoTransp() {
                     </button>
                   ) : null
                 })()}
-                {cv.estado === 'activo' && !cv.fecha_descarga && etapa === 'en_camino' && (
+                {cv.estado === 'activo' && !cv.fecha_descarga && etapa === 'en_camino' && ok('camiones') && (
                   <>
                   {docVigente(cv.id) && !cv.fecha_carga && (
                     <Button size="sm" variant="azul" onClick={() => { setModalCargado(cv.id); setKilosCargados(cv.kilos_asignados || '') }} className="mt-2">
@@ -615,7 +617,7 @@ export default function DetallePedidoTransp() {
         )}
 
         {/* Cancelar viaje (solo Confirmado / Datos enviados) */}
-        {['confirmado','datos_enviados'].includes(etapa) && !finalizado && pedido.estado !== 'cancelado' && (
+        {['confirmado','datos_enviados'].includes(etapa) && !finalizado && pedido.estado !== 'cancelado' && ok('cancelar_viajes') && (
           <Button variant="danger" onClick={() => setModalCancelar(true)} className="mt-2">
             Cancelar viaje
           </Button>

@@ -9,6 +9,8 @@ import Badge from '../../components/ui/Badge'
 import Button from '../../components/ui/Button'
 import Banner from '../../components/ui/Banner'
 import Modal from '../../components/ui/Modal'
+import { useAuth } from '../../context/AuthContext'
+import { puede } from '../../utils/permisos'
 import Field, { Textarea } from '../../components/ui/Field'
 import MapRuta from '../../components/ui/MapRuta'
 import { FORMAS_PAGO } from '../../utils/constants'
@@ -17,6 +19,8 @@ import { tituloPedido, iconoPedido, bgPedido } from '../../utils/pedido'
 import { formatNroPedido, formatFecha, formatNum } from '../../utils/format'
 
 export default function PedidoDirecto() {
+  const { cuenta } = useAuth()
+  const puedeResponder = puede(cuenta, 'ofertar')
   const { id } = useParams()
   const navigate = useNavigate()
   const [pedido, setPedido] = useState(null)
@@ -157,14 +161,19 @@ export default function PedidoDirecto() {
           </Card>
         )}
 
-        <div className="flex gap-2 mb-3">
+        {!puedeResponder && (
+          <Banner color="orange" title="Sin permiso para responder" className="mb-3">
+            Tu usuario no puede aceptar ni rechazar pedidos. Avisale al master de la empresa.
+          </Banner>
+        )}
+        {puedeResponder && <div className="flex gap-2 mb-3">
           <Button onClick={() => setModalAceptar(true)} disabled={saving} className="flex-1">
             ✓ Aceptar pedido
           </Button>
           <Button variant="danger" full={false} onClick={() => setModalRechazar(true)} disabled={saving}>
             Rechazar
           </Button>
-        </div>
+        </div>}
 
         <Modal open={modalAceptar} onClose={() => setModalAceptar(false)} title="Aceptar pedido">
           <div className="text-xs text-gray-500 mb-4">

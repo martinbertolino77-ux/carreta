@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
+import { puede } from '../../utils/permisos'
 import Shell, { Body } from '../../components/layout/Shell'
 import Topbar from '../../components/layout/Topbar'
 import BottomTabs from '../../components/layout/BottomTabs'
@@ -203,6 +204,18 @@ export default function CrearPedido() {
       setSaving(false)
     }
   }
+
+  if (!puede(cuenta, 'crear_pedidos')) return (
+    <Shell>
+      <Topbar title="Nuevo pedido" showBack backTo="/productor/pedidos" accent="verde" />
+      <Body>
+        <Banner color="orange" title="Sin permiso para crear pedidos">
+          Tu usuario no puede crear pedidos en esta empresa. Pedíselo al master desde "Mi equipo".
+        </Banner>
+      </Body>
+      <BottomTabs rol="productor" />
+    </Shell>
+  )
 
   return (
     <Shell>

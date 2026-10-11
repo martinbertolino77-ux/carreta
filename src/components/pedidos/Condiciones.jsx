@@ -1,9 +1,15 @@
 import { formatNum } from '../../utils/format'
+import { useAuth } from '../../context/AuthContext'
+import { puede } from '../../utils/permisos'
 
 // Condiciones acordadas por teléfono y cargadas por el productor al elegir
 export default function Condiciones({ oferta, titulo = 'Condiciones acordadas' }) {
+  const { cuenta } = useAuth()
   if (!oferta) return null
-  const { precio_acordado, forma_pago, monto_acordado, condiciones_acordadas } = oferta
+  const ver = puede(cuenta, 'ver_precios')
+  const { forma_pago, condiciones_acordadas } = oferta
+  const precio_acordado = ver ? oferta.precio_acordado : null
+  const monto_acordado  = ver ? oferta.monto_acordado : null
   if (!precio_acordado && !forma_pago && !monto_acordado && !condiciones_acordadas) return null
   const Fila = ({ l, v }) => (
     <div className="flex justify-between gap-3 py-1 border-b border-gray-50 last:border-0">

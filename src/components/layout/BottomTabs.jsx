@@ -1,4 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
+import { puede } from '../../utils/permisos'
 
 const TABS_PRODUCTOR = [
   { path: '/productor/pedidos', icon: '📋', label: 'Pedidos' },
@@ -17,7 +19,9 @@ const TABS_TRANSPORTISTA = [
 export default function BottomTabs({ rol }) {
   const navigate  = useNavigate()
   const { pathname } = useLocation()
-  const tabs = rol === 'transportista' ? TABS_TRANSPORTISTA : TABS_PRODUCTOR
+  const { cuenta } = useAuth()
+  const tabs = (rol === 'transportista' ? TABS_TRANSPORTISTA : TABS_PRODUCTOR)
+    .filter(t => t.path !== '/productor/crear' || puede(cuenta, 'crear_pedidos'))
   const activeColor = rol === 'transportista' ? 'border-azul-500 text-azul-600' : 'border-verde-600 text-verde-700'
 
   return (

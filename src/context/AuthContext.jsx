@@ -68,10 +68,10 @@ export function AuthProvider({ children }) {
     const [{ data }, { data: mems }] = await Promise.all([
       supabase.from('usuarios').select('*').eq('id', id).single(),
       supabase.from('miembros')
-        .select('permiso, created_at, cuentas(id, cuit, razon_social, roles, domicilio, localidad, provincia)')
+        .select('permiso, permisos, created_at, cuentas(id, cuit, razon_social, roles, domicilio, localidad, provincia)')
         .eq('usuario_id', id).order('created_at'),
     ])
-    const lista = (mems || []).filter(m => m.cuentas).map(m => ({ ...m.cuentas, permiso: m.permiso }))
+    const lista = (mems || []).filter(m => m.cuentas).map(m => ({ ...m.cuentas, permiso: m.permiso, permisos: m.permisos || {} }))
     const elegida = preferida || cuentaGuardada()
     const activa = lista.find(c => c.id === elegida) || lista[0] || null
     setCuentaActiva(activa?.id)

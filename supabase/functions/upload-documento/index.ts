@@ -64,7 +64,7 @@ serve(async (req) => {
     const cuentaId = (pedido as any).productores?.cuenta_id
     const { data: miembro } = await supabase
       .from('miembros')
-      .select('permiso')
+      .select('permiso, permisos')
       .eq('cuenta_id', cuentaId)
       .eq('usuario_id', userId)
       .maybeSingle()
@@ -72,6 +72,10 @@ serve(async (req) => {
     if (!miembro) return json({ error: 'No tenés permiso sobre este pedido' }, 403)
     if (miembro.permiso === 'lectura') {
       return json({ error: 'Tu usuario es de solo lectura. Pedile al master permiso de operador.' }, 403)
+    }
+    // deno-lint-ignore no-explicit-any
+    if (miembro.permiso === 'operador' && (miembro as any).permisos?.documentos === false) {
+      return json({ error: 'No tenés permiso para subir documentos. Pedíselo al master de la empresa.' }, 403)
     }
 
     // 5. Subir archivo

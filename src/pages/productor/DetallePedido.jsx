@@ -2,6 +2,7 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
+import { puede } from '../../utils/permisos'
 import Shell, { Body } from '../../components/layout/Shell'
 import Topbar from '../../components/layout/Topbar'
 import BottomTabs from '../../components/layout/BottomTabs'
@@ -28,6 +29,7 @@ import IncidenciaCard from '../../components/pedidos/IncidenciaCard'
 
 export default function DetallePedido() {
   const { usuario, cuenta, cambiarCuenta } = useAuth()
+  const ok = (a) => puede(cuenta, a)
   const { id } = useParams()
   const navigate = useNavigate()
   const [pedido, setPedido] = useState(null)
@@ -445,7 +447,7 @@ export default function DetallePedido() {
             </div>
             {pedido.cupo_cerrado ? (
               <div className="text-[11px] text-gray-500 mt-1.5">🔒 Cupo cerrado{cubierto < pedido.camiones_necesarios ? ' (incompleto)' : ''}</div>
-            ) : cubierto > 0 && (
+            ) : cubierto > 0 && ok('aceptar_ofertas') && (
               <Button size="sm" variant="secondary" onClick={cerrarCupo} className="mt-2">
                 🔒 Cerrar cupo en {cubierto} camión{cubierto > 1 ? 'es' : ''}
               </Button>
@@ -488,10 +490,10 @@ export default function DetallePedido() {
                       <div className="text-xs text-gray-500 mt-0.5">
                         {o.camiones_ofrecidos} camión{o.camiones_ofrecidos > 1 ? 'es' : ''} ofrecido{o.camiones_ofrecidos > 1 ? 's' : ''}
                         {o.equipos?.length > 0 && ` · ${o.equipos.map(e => VEHICULOS[e] || e).join(', ')}`}
-                        {o.precio_tn && ` · $${formatNum(o.precio_tn)}/tn`}
-                        {o.precio_km && ` · $${formatNum(o.precio_km)}/km`}
+                        {ok('ver_precios') && o.precio_tn && ` · $${formatNum(o.precio_tn)}/tn`}
+                        {ok('ver_precios') && o.precio_km && ` · $${formatNum(o.precio_km)}/km`}
                         {o.km_estimados && ` · ${formatNum(o.km_estimados)} km`}
-                        {o.precio_km && o.km_estimados && (
+                        {ok('ver_precios') && o.precio_km && o.km_estimados && (
                           <span className="font-semibold text-gray-700"> · Total: ${formatNum(o.precio_km * o.km_estimados)}</span>
                         )}
                       </div>
@@ -518,7 +520,7 @@ export default function DetallePedido() {
                       className="w-full text-xs border border-gray-100 rounded-[8px] px-2.5 py-1.5 bg-amber-50 text-gray-700 placeholder-gray-400 focus:outline-none focus:border-amber-300 resize-none" />
                     {guardandoNota[o.id] && <span className="text-[10px] text-gray-400">Guardando…</span>}
                   </div>
-                  {o.estado === 'enviada' && cupoAbierto && restante > 0 && (
+                  {o.estado === 'enviada' && cupoAbierto && restante > 0 && ok('aceptar_ofertas') && (
                     <div className="flex gap-2 items-center">
                       <Button size="sm" full={false} onClick={() => abrirAceptar(o, maxAceptable)}>
                         ✓ Elegir
@@ -620,7 +622,7 @@ export default function DetallePedido() {
                     {cv.kilos_asignados && (
                       <div className="flex items-center justify-between mt-1.5">
                         <div className="text-xs text-verde-600">⚖️ {formatNum(cv.kilos_asignados)} kg asignados</div>
-                        {!cv.fecha_descarga && (
+                        {!cv.fecha_descarga && ok('documentos') && (
                           <button onClick={() => abrirDoc(cv)} className="text-xs text-azul-600 font-semibold">Editar</button>
                         )}
                       </div>
@@ -629,7 +631,7 @@ export default function DetallePedido() {
                       <div className="mt-1.5 bg-verde-50 border border-verde-200 rounded-lg px-2.5 py-1.5 text-xs text-verde-700 font-medium">
                         ✅ {docLabel} enviado al transportista — {doc.nombre_original}
                       </div>
-                    ) : enCurso && ['datos_enviados', 'en_camino'].includes(o.etapa) && (
+                    ) : enCurso && ['datos_enviados', 'en_camino'].includes(o.etapa) && ok('documentos') && (
                       <button onClick={() => abrirDoc(cv)}
                         className="mt-1.5 w-full text-xs text-azul-600 font-semibold border border-azul-200 rounded-lg px-2 py-1.5 bg-azul-50 text-left">
                         📄 Asignar kilos / {docLabel}
@@ -691,11 +693,13 @@ export default function DetallePedido() {
         )}
 
         {/* Repetir pedido (mismos datos, nueva fecha) */}
-        <Button variant="secondary" className="mb-2" onClick={() => navigate('/productor/crear', {
-          state: { repetir: { ...pedido, hacienda } }
-        })}>
-          🔁 Repetir pedido
-        </Button>
+        {ok('crear_pedidos') && (
+          <Button variant="secondary" className="mb-2" onClick={() => navigate('/productor/crear', {
+            state: { repetir: { ...pedido, hacienda } }
+          })}>
+            🔁 Repetir pedido
+          </Button>
+        )}
 
         {/* Modo directo: esperando respuesta */}
         {pedido.estado === 'esperando_respuesta' && (
@@ -708,13 +712,13 @@ export default function DetallePedido() {
             </div>
             <div className="text-xs text-gray-500 mb-2">Esperando que acepte o rechace.</div>
             <Contacto telefono={pedido.transportista_directo_info?.usuarios?.telefono} className="mb-2" />
-            <Button variant="danger" onClick={async () => {
+            {ok('cancelar') && <Button variant="danger" onClick={async () => {
               if (!confirm('¿Retirás el pedido? El transportista recibirá un aviso.')) return
               const { error } = await supabase.rpc('retirar_pedido_directo', { p_pedido_id: id })
               if (error) alert(error.message); else await cargar(true)
             }}>
               Retirar pedido
-            </Button>
+            </Button>}
           </Card>
         )}
 
@@ -726,7 +730,7 @@ export default function DetallePedido() {
                `${pedido.transportista_directo_info?.usuarios?.nombre || ''} ${pedido.transportista_directo_info?.usuarios?.apellido || ''}`.trim()}
               {pedido.motivo_rechazo ? ` rechazó el pedido. Motivo: ${pedido.motivo_rechazo}` : ' rechazó el pedido.'}
             </Banner>
-            <div className="flex gap-2">
+            {ok('crear_pedidos') && <div className="flex gap-2">
               <Button variant="secondary" full={false} onClick={() => navigate('/productor/crear', {
                 state: { repetir: { ...pedido, hacienda, _modoDirecto: true } }
               })}>
@@ -739,7 +743,7 @@ export default function DetallePedido() {
               }}>
                 📢 Publicar a la zona
               </Button>
-            </div>
+            </div>}
           </Card>
         )}
 
@@ -750,7 +754,7 @@ export default function DetallePedido() {
         )}
 
         {/* Cancelar (solo lo que todavía no salió) */}
-        {puedeCancelar && (
+        {puedeCancelar && ok('cancelar') && (
           <Button variant="danger" onClick={() => setModalCancelar(true)} className="mt-2">
             {aceptadas.some(o => ['en_camino','descargado','finalizado'].includes(o.etapa))
               ? 'Cancelar camiones que no salieron'

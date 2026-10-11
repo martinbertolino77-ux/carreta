@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
+import { puede } from '../../utils/permisos'
 import Shell, { Body } from '../../components/layout/Shell'
 import Topbar from '../../components/layout/Topbar'
 import BottomTabs from '../../components/layout/BottomTabs'
@@ -231,7 +232,7 @@ export default function PerfilTransp() {
         </Card>
 
         {/* Flota: chasis, remolques y choferes agrupados */}
-        <Flota chasis={chasis} acoplados={acoplados} choferes={choferes}
+        <Flota chasis={chasis} acoplados={acoplados} choferes={choferes} soloVer={!puede(cuenta, 'flota')}
           onAgregar={(t) => t === 'chasis' ? abrirChasis() : t === 'acoplados' ? abrirAcoplado() : abrirChofer()}
           onEditar={(t, x) => t === 'chasis' ? abrirChasis(x) : t === 'acoplados' ? abrirAcoplado(x) : abrirChofer(x)}
           onToggleActivo={toggleItem} />

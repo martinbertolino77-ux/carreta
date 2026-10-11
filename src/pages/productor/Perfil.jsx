@@ -16,6 +16,7 @@ import Banner from '../../components/ui/Banner'
 import { PROVINCIAS } from '../../utils/constants'
 import { formatCuit } from '../../utils/format'
 import Contador from '../../components/ui/Contador'
+import Establecimientos from '../../components/productor/Establecimientos'
 
 const INIT_ESTAB = {
   nombre: '', domicilio: '', localidad: '',
@@ -187,38 +188,8 @@ export default function Perfil() {
           )}
         </Card>
 
-        <Card className="mb-3">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-sm font-semibold text-gray-900">Mis establecimientos</div>
-            <button onClick={abrirNuevo} className="text-xs text-azul-600 font-semibold">+ Agregar</button>
-          </div>
-          {establecimientos.length === 0 ? (
-            <div className="text-center py-6">
-              <div className="text-3xl mb-2 opacity-40">🏡</div>
-              <div className="text-xs text-gray-400">No tenés establecimientos cargados</div>
-              <button onClick={abrirNuevo} className="text-xs text-verde-700 font-semibold mt-1">Agregar el primero</button>
-            </div>
-          ) : establecimientos.map(e => (
-            <div key={e.id} className="border border-gray-100 rounded-[10px] p-3 mb-2">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="text-sm font-semibold text-gray-900">{e.nombre}</div>
-                  <div className="text-xs text-gray-500 mt-0.5">📍 {e.localidad}, {e.provincia}</div>
-                  {e.telefono && <div className="text-xs text-gray-400 mt-0.5">📞 {e.telefono}</div>}
-                  {e.whatsapp && (
-                    <a href={`https://wa.me/54${e.whatsapp.replace(/\D/g,'')}`} target="_blank" rel="noreferrer"
-                      className="text-xs text-green-600 font-medium mt-0.5 block">💬 WhatsApp</a>
-                  )}
-                  {e.link_maps && <a href={e.link_maps} target="_blank" rel="noreferrer" className="text-xs text-azul-600 mt-0.5 block">Ver en Maps</a>}
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                  <button onClick={() => abrirEditar(e)} className="text-xs text-azul-600 font-medium">Editar</button>
-                  <Toggle value={e.activo} onChange={() => toggleActivo(e.id, e.activo)} />
-                </div>
-              </div>
-            </div>
-          ))}
-        </Card>
+        <Establecimientos establecimientos={establecimientos}
+          onAgregar={abrirNuevo} onEditar={abrirEditar} onToggleActivo={toggleActivo} />
 
         <Card className="mb-3">
           <div className="text-sm font-semibold text-gray-900 mb-0.5">Mis avisos</div>

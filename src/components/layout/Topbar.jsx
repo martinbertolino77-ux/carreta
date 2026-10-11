@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../lib/supabase'
 
-export default function Topbar({ title, showBack, backTo, accent = 'verde' }) {
+export default function Topbar({ title, showBack, backTo, accent = 'verde', rol }) {
   const navigate = useNavigate()
   const { usuario, cuenta, cuentas } = useAuth()
   const varias = (cuentas?.length || 0) > 1
@@ -16,7 +16,7 @@ export default function Topbar({ title, showBack, backTo, accent = 'verde' }) {
     : '?'
 
   const bg = accent === 'azul' ? 'bg-azul-600' : 'bg-verde-800'
-  const rolActual = accent === 'azul' ? 'transportista' : 'productor'
+  const rolActual = rol || (accent === 'azul' ? 'transportista' : 'productor')
 
   useEffect(() => {
     if (!usuario) return
@@ -97,7 +97,7 @@ export default function Topbar({ title, showBack, backTo, accent = 'verde' }) {
           )}
         </button>
         <div
-          onClick={() => navigate(accent === 'azul' ? '/transportista/perfil' : '/productor/perfil')}
+          onClick={() => navigate(rolActual === 'chofer' ? '/roles' : accent === 'azul' ? '/transportista/perfil' : '/productor/perfil')}
           className="w-8 h-8 rounded-full bg-white/20 border-2 border-white/30 flex items-center justify-center
             text-[11px] font-semibold text-white cursor-pointer"
         >
@@ -123,6 +123,7 @@ export default function Topbar({ title, showBack, backTo, accent = 'verde' }) {
                     onClick={() => {
                       setShowPanel(false)
                       if (['solicitud_acceso', 'equipo_alta'].includes(n.tipo)) { navigate('/equipo'); return }
+                      if (rolActual === 'chofer') { navigate('/chofer'); return }
                       if (!n.pedido_id) return
                       if (rolActual === 'transportista' && ['pedido_nuevo', 'oferta_reactivada'].includes(n.tipo))
                         navigate(`/transportista/disponible/${n.pedido_id}`)

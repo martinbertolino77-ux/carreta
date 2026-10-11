@@ -22,6 +22,7 @@ export const ACCIONES = {
 export function puede(cuenta, accion) {
   if (!cuenta) return false
   if (cuenta.permiso === 'master') return true
+  if (cuenta.permiso === 'chofer') return false
   if (cuenta.permiso === 'lectura') return accion === 'ver_precios'
   const p = cuenta.permisos || {}
   if (p[accion] === false) return false

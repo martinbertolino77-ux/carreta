@@ -539,7 +539,7 @@ export default function DetallePedidoTransp() {
                 {misIncidencias.filter(inc => inc.camion_viaje_id === cv.id).map(inc => (
                   <IncidenciaCard key={inc.id} inc={inc} cv={cv} rol="transportista"
                     tieneDocumento={!!docVigente(cv.id)} docLabel={docLabel}
-                    onResolver={inc.accion === 'aviso_productor' || inc.accion === 'reparacion' ? resolverAviso : null} />
+                    onResolver={['aviso_productor', 'reparacion', 'aviso_chofer'].includes(inc.accion) ? resolverAviso : null} />
                 ))}
                 <div className="text-xs text-gray-500">
                   🚛 {cv.chasis?.dominio}{cv.acoplados ? ` + ${cv.acoplados.dominio}` : ''}

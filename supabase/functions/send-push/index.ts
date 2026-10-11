@@ -12,6 +12,7 @@ const TIPOS_EQUIPO = ['solicitud_acceso', 'equipo_alta', 'acceso_aprobado', 'acc
 
 function urlDestino(n: { tipo: string; rol: string | null; pedido_id: string | null }) {
   if (['solicitud_acceso', 'equipo_alta'].includes(n.tipo)) return '/equipo'
+  if (n.rol === 'chofer') return '/chofer'
   if (!n.pedido_id) return '/'
   if (n.rol === 'productor') return `/productor/pedido/${n.pedido_id}`
   if (n.tipo === 'pedido_nuevo') return `/transportista/disponible/${n.pedido_id}`

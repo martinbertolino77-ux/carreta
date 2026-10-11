@@ -7,6 +7,7 @@ export const ACCIONES_INCIDENCIA = {
   reparacion:        'Se repara y sigue',
   siniestro:         'Siniestro / pérdida de carga',
   aviso_productor:   'Aviso del productor',
+  aviso_chofer:      'Aviso del chofer',
 }
 export const TIPOS_INCIDENCIA = { rotura: 'Rotura mecánica', accidente: 'Accidente', otro: 'Otro', aviso: 'Aviso' }
 
@@ -17,7 +18,7 @@ const fmt = (n) => Number(n || 0).toLocaleString('es-AR')
 
 export default function IncidenciaCard({ inc, cv, rol, tieneDocumento, docLabel = 'CPE', onResolver }) {
   if (!inc) return null
-  const informativa = ['reparacion', 'aviso_productor'].includes(inc.accion)
+  const informativa = ['reparacion', 'aviso_productor', 'aviso_chofer'].includes(inc.accion)
   const color = informativa ? 'yellow' : 'orange'
   const cls = color === 'yellow'
     ? 'bg-yellow-50 border-yellow-200 text-yellow-800'

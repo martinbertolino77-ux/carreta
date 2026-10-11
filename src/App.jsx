@@ -8,6 +8,7 @@ import Inicio from './components/layout/Inicio'
 // Auth
 const Login            = lazy(() => import('./pages/auth/Login'))
 const Roles            = lazy(() => import('./pages/auth/Roles'))
+const ViajesChofer     = lazy(() => import('./pages/chofer/Viajes'))
 const Registro         = lazy(() => import('./pages/auth/Registro'))
 const OlvidePassword   = lazy(() => import('./pages/auth/OlvidePassword'))
 const NuevaPassword    = lazy(() => import('./pages/auth/NuevaPassword'))
@@ -58,6 +59,7 @@ export default function App() {
             <Route path="/nueva-password" element={<NuevaPassword />} />
             <Route path="/roles" element={<ProtectedRoute><Roles /></ProtectedRoute>} />
             <Route path="/equipo" element={<ProtectedRoute><Equipo /></ProtectedRoute>} />
+            <Route path="/chofer" element={<ProtectedRoute rolRequerido="chofer"><ViajesChofer /></ProtectedRoute>} />
             <Route path="/" element={<Inicio />} />
 
             <Route path="/productor/pedidos" element={<ProtectedRoute rolRequerido="productor"><MisPedidos /></ProtectedRoute>} />

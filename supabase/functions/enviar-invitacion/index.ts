@@ -4,7 +4,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const SITE = 'https://carreta.com.ar'
-const PERMISO: Record<string, string> = { master: 'Master', operador: 'Operador', lectura: 'Solo lectura' }
+const PERMISO: Record<string, string> = { master: 'Master', operador: 'Operador', lectura: 'Solo lectura', chofer: 'Chofer' }
 
 const cors = {
   'Access-Control-Allow-Origin': '*',

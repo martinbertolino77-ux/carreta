@@ -16,8 +16,8 @@ const PERMISOS = [
   { id: 'lectura',  label: 'Solo lectura' },
   { id: 'master',   label: 'Master' },
 ]
-const COLOR_PERMISO = { master: 'purple', operador: 'blue', lectura: 'gray' }
-const NOMBRE_PERMISO = { master: 'Master', operador: 'Operador', lectura: 'Solo lectura' }
+const COLOR_PERMISO = { master: 'purple', operador: 'blue', lectura: 'gray', chofer: 'orange' }
+const NOMBRE_PERMISO = { master: 'Master', operador: 'Operador', lectura: 'Solo lectura', chofer: 'Chofer' }
 
 // Acciones que aplican a la empresa (según sus roles), sin repetir "ver precios"
 function accionesDe(roles = []) {
@@ -28,6 +28,10 @@ function accionesDe(roles = []) {
 
 // Qué puede hacer cada permiso, en nombre de la empresa (para avisar antes de darlo)
 function alcance(permiso, roles = [], permisos = {}) {
+  if (permiso === 'chofer') return {
+    puede: ['ver solo los viajes donde está asignado (origen, destino, kilos, CPE y contacto)', 'marcar cargado e informar la descarga', 'avisar problemas en el viaje'],
+    nota: 'No ve precios, ni otros viajes, ni la flota, ni el equipo.',
+  }
   if (permiso === 'operador') {
     const c = { permiso: 'operador', permisos }
     const lista = accionesDe(roles)
@@ -69,6 +73,10 @@ export default function Equipo() {
 
   const [invEmail, setInvEmail]       = useState('')
   const [invPermiso, setInvPermiso]   = useState('operador')
+  const [invChofer, setInvChofer]     = useState('')
+  const [choferes, setChoferes]       = useState([])    // choferes de la flota (para invitar como chofer)
+  const esTransporte = (cuenta?.roles || []).includes('transportista')
+  const opciones = esTransporte ? [...PERMISOS, { id: 'chofer', label: 'Chofer' }] : PERMISOS
   const [linkInv, setLinkInv]         = useState(null)
   const [copiado, setCopiado]         = useState(false)
   const [mail, setMail]               = useState(null)   // estado del mail de la invitación: enviando / ok / error
@@ -84,9 +92,18 @@ export default function Equipo() {
     if (!cuenta) return
     const { data: m } = await supabase.rpc('equipo_miembros', { p_cuenta: cuenta.id })
     // permisos a medida de cada integrante
-    const { data: pm } = await supabase.from('miembros').select('usuario_id, permisos').eq('cuenta_id', cuenta.id)
-    const porUsuario = Object.fromEntries((pm || []).map(x => [x.usuario_id, x.permisos || {}]))
-    setMiembros((m || []).map(x => ({ ...x, permisos: porUsuario[x.usuario_id] || {} })))
+    const { data: pm } = await supabase.from('miembros').select('usuario_id, permisos, chofer_id').eq('cuenta_id', cuenta.id)
+    const porUsuario = Object.fromEntries((pm || []).map(x => [x.usuario_id, x]))
+    setMiembros((m || []).map(x => ({ ...x, permisos: porUsuario[x.usuario_id]?.permisos || {}, chofer_id: porUsuario[x.usuario_id]?.chofer_id })))
+    if (esTransporte) {
+      const { data: tr } = await supabase.from('transportistas').select('id').eq('cuenta_id', cuenta.id)
+      const ids = (tr || []).map(t => t.id)
+      if (ids.length) {
+        const { data: ch } = await supabase.from('choferes').select('id, nombre, apellido, activo')
+          .in('transportista_id', ids).order('apellido')
+        setChoferes(ch || [])
+      }
+    }
     if (esMaster) {
       const [{ data: s }, { data: i }] = await Promise.all([
         supabase.rpc('equipo_solicitudes', { p_cuenta: cuenta.id }),
@@ -152,6 +169,7 @@ export default function Equipo() {
   const invitar = () => {
     setError(''); setLinkInv(null); setCopiado(false); setMail(null)
     if (!/\S+@\S+\.\S+/.test(invEmail)) { setError('Ingresá un email válido'); return }
+    if (invPermiso === 'chofer' && !invChofer) { setError('Elegí qué chofer de tu flota es'); return }
     confirmarPermiso(invPermiso, invEmail.trim().toLowerCase(), 'Invitar', generarInvitacion)
   }
 
@@ -162,12 +180,16 @@ export default function Equipo() {
     })
     setOcupado(null)
     if (error) { setError(error.message); return }
+    if (invPermiso === 'chofer') {
+      const { error: e3 } = await supabase.rpc('asignar_chofer_invitacion', { p_token: data, p_chofer: invChofer })
+      if (e3) { setError(e3.message); return }
+    }
     if (invPermiso === 'operador' && limitado(invPermisos)) {
       const { error: e2 } = await supabase.rpc('ajustar_permisos_invitacion', { p_token: data, p_permisos: invPermisos })
       if (e2) { setError(e2.message); return }
     }
     setLinkInv({ email: invEmail.trim().toLowerCase(), url: linkDe(data), token: data })
-    setInvEmail(''); setInvPermisos({})
+    setInvEmail(''); setInvPermisos({}); setInvChofer('')
     cargar()
     mandarMail(data)
   }
@@ -249,6 +271,10 @@ export default function Equipo() {
                   </div>
                   <div className="text-xs text-gray-500 truncate">{m.email}</div>
                   {m.telefono && <div className="text-xs text-gray-400">{m.telefono}</div>}
+                  {m.permiso === 'chofer' && (() => {
+                    const c = choferes.find(x => x.id === m.chofer_id)
+                    return <div className="text-[11px] text-orange-700">🧑‍✈️ {c ? `Chofer de la flota: ${c.apellido}, ${c.nombre}` : 'Chofer sin asignar en la flota'}</div>
+                  })()}
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   <Badge color={COLOR_PERMISO[m.permiso]}>{NOMBRE_PERMISO[m.permiso]}</Badge>
@@ -261,6 +287,7 @@ export default function Equipo() {
                     onChange={e => cambiarPermiso(m, e.target.value)}
                     className="border border-gray-200 rounded-[8px] px-2 py-1 text-xs bg-white">
                     {PERMISOS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                    {m.permiso === 'chofer' && <option value="chofer">Chofer</option>}
                   </select>
                   {m.permiso === 'operador' && (
                     <button disabled={!!ocupado} className="text-xs text-azul-600 font-semibold"
@@ -297,8 +324,15 @@ export default function Equipo() {
                 <span className="text-xs text-gray-500">Permiso:</span>
                 <select value={invPermiso} onChange={e => setInvPermiso(e.target.value)}
                   className="border border-gray-200 rounded-[8px] px-2 py-1 text-xs bg-white">
-                  {PERMISOS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                  {opciones.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
                 </select>
+                {invPermiso === 'chofer' && (
+                  <select value={invChofer} onChange={e => setInvChofer(e.target.value)}
+                    className="border border-gray-200 rounded-[8px] px-2 py-1 text-xs bg-white flex-1 min-w-0">
+                    <option value="">¿Qué chofer de la flota es?</option>
+                    {choferes.filter(c => c.activo !== false).map(c => <option key={c.id} value={c.id}>{c.apellido}, {c.nombre}</option>)}
+                  </select>
+                )}
                 {invPermiso === 'operador' && (
                   <button className="text-xs text-azul-600 font-semibold"
                     onClick={() => setEditPerm({ titulo: 'Permisos del invitado', permisos: invPermisos,

@@ -25,7 +25,7 @@ import ModalCalificar from '../../components/pedidos/ModalCalificar'
 import { useAuth } from '../../context/AuthContext'
 
 export default function DetallePedidoTransp() {
-  const { usuario } = useAuth()
+  const { usuario, cuenta, cuentas, cambiarCuenta } = useAuth()
   const { id } = useParams()
   const navigate = useNavigate()
   const [pedido, setPedido] = useState(null)
@@ -69,7 +69,7 @@ export default function DetallePedidoTransp() {
   const [misIncidencias, setMisIncidencias] = useState([])
   const [ocupados, setOcupados] = useState([])
 
-  useEffect(() => { cargar() }, [id])
+  useEffect(() => { cargar() }, [id, cuenta?.id])
 
   // Tiempo real: recargar cuando cambia el pedido o la oferta
   useEffect(() => {
@@ -123,6 +123,14 @@ export default function DetallePedidoTransp() {
       const { data } = await supabase.from('ofertas')
         .select('*').eq('pedido_id', id).eq('transportista_id', t.id).maybeSingle()
       o = data || null
+    }
+    // Sin oferta en esta empresa: ¿la tiene otra de mis empresas? (por ej. desde un aviso)
+    if (!o && cuentas.length > 1) {
+      const otras = cuentas.filter(c => c.id !== cuenta?.id).map(c => c.id)
+      const { data: ot } = await supabase.from('ofertas')
+        .select('id, transportistas!inner(cuenta_id)').eq('pedido_id', id)
+        .in('transportistas.cuenta_id', otras).limit(1)
+      if (ot?.[0] && cambiarCuenta(ot[0].transportistas.cuenta_id, true)) return
     }
     setMiOferta(o)
 

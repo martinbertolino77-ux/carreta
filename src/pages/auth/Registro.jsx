@@ -5,6 +5,7 @@ import { validarCuit, limpiarCuit } from '../../utils/validaciones'
 import LocalidadInput from '../../components/ui/LocalidadInput'
 import HCaptcha from '@hcaptcha/react-hcaptcha'
 import { CLAVE_INVITACION } from './SinCuenta'
+import { useAuth } from '../../context/AuthContext'
 
 const HCAPTCHA_SITE_KEY = '06e4ad0e-ff76-469c-a496-0c929448e82e'
 
@@ -14,6 +15,7 @@ const cls = 'w-full border border-gray-200 rounded-[10px] px-3 py-2.5 text-sm mb
 
 export default function Registro() {
   const navigate = useNavigate()
+  const { session, loading: cargandoSesion } = useAuth()
   const [step, setStep]       = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
@@ -42,12 +44,18 @@ export default function Registro() {
   useEffect(() => {
     if (!tokenInv) return
     try { localStorage.setItem(CLAVE_INVITACION, tokenInv) } catch { /* sin storage */ }
+    if (session) return   // ya está logueado: la acepta desde "Elegir empresa"
     supabase.rpc('ver_invitacion', { p_token: tokenInv }).then(({ data, error }) => {
       const i = !error && data?.[0]
       if (i?.vigente) { setInv(i); setForm(f => ({ ...f, email: i.email })) }
       else setInv(false)
     })
-  }, [tokenInv])
+  }, [tokenInv, session])
+
+  // Ya logueado con un link de invitación → a elegir empresa, donde la acepta
+  useEffect(() => {
+    if (tokenInv && !cargandoSesion && session) navigate('/roles', { replace: true })
+  }, [tokenInv, session, cargandoSesion])
   const toggleRol = (r) => setRoles(rs => rs.includes(r) ? rs.filter(x => x !== r) : [...rs, r])
 
   const validarStep1 = () => {
@@ -163,6 +171,23 @@ export default function Registro() {
             <p className="text-xs text-gray-500 mb-4">Al confirmar vas a entrar directo a <strong>{inv.razon_social}</strong>.</p>
           )}
           <Link to="/login" className="text-verde-700 font-semibold text-sm">Ir a iniciar sesión</Link>
+        </div>
+      </div>
+    )
+  }
+
+  // Ese mail ya tiene usuario: que ingrese y la acepte (sin dejar su empresa)
+  if (modo === 'invitacion' && inv?.ya_registrado) {
+    return (
+      <div className="min-h-screen bg-verde-800 flex flex-col items-center justify-center px-6 py-10">
+        <div className="bg-white rounded-2xl p-6 w-full max-w-sm text-center">
+          <div className="text-4xl mb-3">👥</div>
+          <h2 className="text-base font-bold text-gray-900 mb-2">{inv.razon_social} te invitó</h2>
+          <p className="text-sm text-gray-500 mb-4">
+            <strong>{inv.email}</strong> ya tiene usuario en Carreta. Ingresá con ese mail y vas a poder aceptar la invitación.
+            Seguís en tu empresa actual y sumás esta.
+          </p>
+          <Link to="/login" className="block w-full bg-verde-700 text-white rounded-[10px] py-2.5 text-sm font-bold">Ingresar</Link>
         </div>
       </div>
     )

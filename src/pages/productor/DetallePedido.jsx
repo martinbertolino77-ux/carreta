@@ -27,7 +27,7 @@ import MapRuta from '../../components/ui/MapRuta'
 import IncidenciaCard from '../../components/pedidos/IncidenciaCard'
 
 export default function DetallePedido() {
-  const { usuario, cuenta } = useAuth()
+  const { usuario, cuenta, cambiarCuenta } = useAuth()
   const { id } = useParams()
   const navigate = useNavigate()
   const [pedido, setPedido] = useState(null)
@@ -56,7 +56,7 @@ export default function DetallePedido() {
   const [confirmando, setConfirmando] = useState(false)
   const [modalCalif, setModalCalif] = useState(null)
 
-  useEffect(() => { cargar() }, [id])
+  useEffect(() => { cargar() }, [id, cuenta?.id])
 
   useEffect(() => {
     const channel = supabase
@@ -153,6 +153,9 @@ export default function DetallePedido() {
       `)
       .eq('id', id)
       .single()
+
+    // Pedido de otra de mis empresas (por ej. desde un aviso): paso a esa empresa
+    if (p && cuenta && p.productores?.cuenta_id !== cuenta.id && cambiarCuenta(p.productores?.cuenta_id, true)) return
 
     // Solo la cuenta dueña del pedido puede ver este detalle
     if (!p || !cuenta || p.productores?.cuenta_id !== cuenta.id) {

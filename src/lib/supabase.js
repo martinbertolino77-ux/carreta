@@ -28,14 +28,27 @@ supabase.auth.onAuthStateChange((event) => {
   if (event === 'PASSWORD_RECOVERY') linkRecuperacion.esRecovery = true
 })
 
-// Cuenta (empresa) del usuario logueado
+// Empresa activa: un usuario puede estar en varias; la elegida queda guardada
+// en este navegador y la usa toda la app.
+export const CLAVE_CUENTA = 'carreta-cuenta'
+let cuentaActiva = null
+export function setCuentaActiva(id) {
+  cuentaActiva = id || null
+  try { id ? localStorage.setItem(CLAVE_CUENTA, id) : localStorage.removeItem(CLAVE_CUENTA) } catch { /* sin storage */ }
+}
+export function cuentaGuardada() {
+  try { return localStorage.getItem(CLAVE_CUENTA) } catch { return null }
+}
+
 export async function getMiCuentaId() {
+  if (cuentaActiva) return cuentaActiva
   const { data: { session } } = await supabase.auth.getSession()
   if (!session?.user) return null
   const { data } = await supabase
-    .from('miembros').select('cuenta_id')
-    .eq('usuario_id', session.user.id).limit(1).maybeSingle()
-  return data?.cuenta_id || null
+    .from('miembros').select('cuenta_id').eq('usuario_id', session.user.id)
+  const ids = (data || []).map(m => m.cuenta_id)
+  const guardada = cuentaGuardada()
+  return ids.includes(guardada) ? guardada : (ids[0] || null)
 }
 
 export async function getMiTransportista(campos = 'id') {

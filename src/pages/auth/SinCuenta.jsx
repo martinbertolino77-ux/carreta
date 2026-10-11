@@ -36,10 +36,10 @@ export default function SinCuenta() {
 
   async function aceptar() {
     setAceptando(true); setError('')
-    const { error } = await supabase.rpc('aceptar_invitacion', { p_token: inv.token })
+    const { data, error } = await supabase.rpc('aceptar_invitacion', { p_token: inv.token })
     if (error) { setError(error.message); setAceptando(false); return }
     try { localStorage.removeItem(CLAVE_INVITACION) } catch { /* nada */ }
-    await cargarUsuario(usuario.id)
+    await cargarUsuario(usuario.id, data)
   }
 
   let icono = '⏳', titulo = 'Esperando aprobación', texto = ''

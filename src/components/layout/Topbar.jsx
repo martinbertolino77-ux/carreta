@@ -5,7 +5,8 @@ import { supabase } from '../../lib/supabase'
 
 export default function Topbar({ title, showBack, backTo, accent = 'verde' }) {
   const navigate = useNavigate()
-  const { usuario, cuenta } = useAuth()
+  const { usuario, cuenta, cuentas } = useAuth()
+  const varias = (cuentas?.length || 0) > 1
   const [noLeidas, setNoLeidas] = useState(0)
   const [notifs, setNotifs] = useState([])
   const [showPanel, setShowPanel] = useState(false)
@@ -28,7 +29,7 @@ export default function Topbar({ title, showBack, backTo, accent = 'verde' }) {
       }, () => cargarNotifs())
       .subscribe()
     return () => supabase.removeChannel(sub)
-  }, [usuario, rolActual])
+  }, [usuario, rolActual, cuenta?.id])
 
   async function cargarNotifs() {
     const { data } = await supabase
@@ -37,14 +38,16 @@ export default function Topbar({ title, showBack, backTo, accent = 'verde' }) {
       .eq('usuario_id', usuario.id)
       .or(`rol.eq.${rolActual},rol.is.null`)   // solo avisos del rol actual
       .order('created_at', { ascending: false })
-      .limit(20)
-    setNotifs(data || [])
-    setNoLeidas((data || []).filter(n => !n.leida).length)
+      .limit(60)
+    // solo los de la empresa activa (o personales, sin empresa)
+    const mias = (data || []).filter(n => !n.cuenta_id || !cuenta || n.cuenta_id === cuenta.id).slice(0, 20)
+    setNotifs(mias)
+    setNoLeidas(mias.filter(n => !n.leida).length)
   }
 
   async function marcarLeidas() {
-    await supabase.from('notificaciones').update({ leida: true })
-      .eq('usuario_id', usuario.id).eq('leida', false).or(`rol.eq.${rolActual},rol.is.null`)
+    const ids = notifs.filter(n => !n.leida).map(n => n.id)
+    if (ids.length) await supabase.from('notificaciones').update({ leida: true }).in('id', ids)
     setNoLeidas(0)
     setNotifs(prev => prev.map(n => ({ ...n, leida: true })))
   }
@@ -73,7 +76,11 @@ export default function Topbar({ title, showBack, backTo, accent = 'verde' }) {
           <div className="text-white text-sm font-semibold leading-tight">
             {title || 'Carreta'}
           </div>
-          {cuenta?.permiso === 'lectura' ? (
+          {varias ? (
+            <button onClick={() => navigate('/roles')} className="block text-left text-white/80 text-[10px] font-semibold max-w-[180px] truncate">
+              🏢 {cuenta?.razon_social} ▾{cuenta?.permiso === 'lectura' && <span className="text-yellow-200"> · 👁 Solo lectura</span>}
+            </button>
+          ) : cuenta?.permiso === 'lectura' ? (
             <div className="text-yellow-200 text-[10px] font-semibold">👁 Solo lectura</div>
           ) : !title && (
             <div className="text-white/60 text-[10px]">Conectando la actividad agropecuaria</div>

@@ -6,6 +6,7 @@ import Topbar from '../components/layout/Topbar'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
+import Modal from '../components/ui/Modal'
 import { formatCuit } from '../utils/format'
 
 // master: administra todo · operador: opera, no administra el equipo · lectura: solo ve
@@ -16,6 +17,23 @@ const PERMISOS = [
 ]
 const COLOR_PERMISO = { master: 'purple', operador: 'blue', lectura: 'gray' }
 const NOMBRE_PERMISO = { master: 'Master', operador: 'Operador', lectura: 'Solo lectura' }
+
+// Qué puede hacer cada permiso, en nombre de la empresa (para avisar antes de darlo)
+function alcance(permiso, roles = []) {
+  const prod = roles.includes('productor'), transp = roles.includes('transportista')
+  const opera = [
+    ...(prod ? ['publicar, modificar y cancelar pedidos', 'aceptar ofertas y comprometer a la empresa con transportistas'] : []),
+    ...(transp ? ['ofertar y aceptar viajes', 'cargar y dar de baja camiones y choferes', 'subir documentos (CPE) e informar incidencias'] : []),
+  ]
+  if (permiso === 'master') return {
+    puede: [...opera, 'editar los datos de la empresa', 'invitar, cambiar permisos y quitar integrantes'],
+    nota: 'Tiene el mismo control que vos: también puede cambiarte el permiso o quitarte (salvo al titular original). Dalo solo a alguien de total confianza.',
+  }
+  return {
+    puede: opera,
+    nota: 'No puede administrar el equipo ni cambiar los datos de la empresa.',
+  }
+}
 
 const fecha = (d) => new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
 
@@ -34,6 +52,13 @@ export default function Equipo() {
   const [invPermiso, setInvPermiso]   = useState('operador')
   const [linkInv, setLinkInv]         = useState(null)
   const [copiado, setCopiado]         = useState(false)
+  const [aviso, setAviso]             = useState(null)   // { permiso, quien, accion, seguir }
+
+  // Antes de dar master u operador: mostrar qué va a poder hacer
+  const confirmarPermiso = (permiso, quien, accion, seguir) => {
+    if (permiso === 'lectura') return seguir()
+    setAviso({ permiso, quien, accion, seguir })
+  }
 
   async function cargar() {
     if (!cuenta) return
@@ -73,12 +98,21 @@ export default function Equipo() {
 
   const resolver = (s, aprobar) => {
     if (!aprobar && !window.confirm(`¿Rechazar el pedido de ${s.nombre} ${s.apellido}?`)) return
-    ejecutar(`sol-${s.id}`, () => supabase.rpc('resolver_solicitud', {
-      p_id: s.id, p_aprobar: aprobar, p_permiso: permisoSol[s.id] || 'operador',
+    const permiso = permisoSol[s.id] || 'operador'
+    const hacer = () => ejecutar(`sol-${s.id}`, () => supabase.rpc('resolver_solicitud', {
+      p_id: s.id, p_aprobar: aprobar, p_permiso: permiso,
     }))
+    if (!aprobar) return hacer()
+    confirmarPermiso(permiso, `${s.nombre} ${s.apellido}`, 'Aprobar', hacer)
   }
 
-  const cambiarPermiso = async (m, permiso) => {
+  const cambiarPermiso = (m, permiso) => {
+    const sube = permiso === 'master' || (permiso === 'operador' && m.permiso === 'lectura')
+    if (!sube) return aplicarPermiso(m, permiso)
+    confirmarPermiso(permiso, `${m.nombre} ${m.apellido}`, 'Cambiar permiso', () => aplicarPermiso(m, permiso))
+  }
+
+  const aplicarPermiso = async (m, permiso) => {
     const ok = await ejecutar(`perm-${m.usuario_id}`, () => supabase.rpc('cambiar_permiso', {
       p_cuenta: cuenta.id, p_usuario: m.usuario_id, p_permiso: permiso,
     }))
@@ -92,9 +126,13 @@ export default function Equipo() {
 
   const linkDe = (token) => `${window.location.origin}/registro?inv=${token}`
 
-  const invitar = async () => {
+  const invitar = () => {
     setError(''); setLinkInv(null); setCopiado(false)
     if (!/\S+@\S+\.\S+/.test(invEmail)) { setError('Ingresá un email válido'); return }
+    confirmarPermiso(invPermiso, invEmail.trim().toLowerCase(), 'Generar link', generarInvitacion)
+  }
+
+  const generarInvitacion = async () => {
     setOcupado('invitar')
     const { data, error } = await supabase.rpc('crear_invitacion', {
       p_cuenta: cuenta.id, p_email: invEmail, p_permiso: invPermiso,
@@ -271,6 +309,33 @@ export default function Equipo() {
           </p>
         )}
       </Body>
+
+      <Modal open={!!aviso} onClose={() => setAviso(null)}
+        title={aviso ? `Dar permiso ${NOMBRE_PERMISO[aviso.permiso]}` : ''}>
+        {aviso && (() => {
+          const a = alcance(aviso.permiso, cuenta?.roles)
+          return (
+            <>
+              <p className="text-sm text-gray-600 mb-2">
+                <strong>{aviso.quien}</strong> va a poder actuar en nombre de <strong>{cuenta?.razon_social}</strong>:
+              </p>
+              <ul className="text-sm text-gray-700 mb-3 space-y-1">
+                {a.puede.map(x => <li key={x}>• {x}</li>)}
+              </ul>
+              <div className={`text-xs rounded-[10px] p-2.5 mb-4 border
+                ${aviso.permiso === 'master' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-orange-50 border-orange-200 text-orange-700'}`}>
+                ⚠️ {a.nota} Lo que haga queda a nombre de la empresa.
+              </div>
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => setAviso(null)}>Cancelar</Button>
+                <Button onClick={() => { const f = aviso.seguir; setAviso(null); f() }}>
+                  {aviso.accion} como {NOMBRE_PERMISO[aviso.permiso]}
+                </Button>
+              </div>
+            </>
+          )
+        })()}
+      </Modal>
     </Shell>
   )
 }

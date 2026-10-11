@@ -28,6 +28,10 @@ import { puede } from '../../utils/permisos'
 export default function DetallePedidoTransp() {
   const { usuario, cuenta, cuentas, cambiarCuenta } = useAuth()
   const ok = (a) => puede(cuenta, a)
+  // Plegado: los camiones descargados o de baja se repliegan solos
+  const [abierto, setAbierto] = useState({})
+  const estaAbierto = (k, porDefecto) => abierto[k] ?? porDefecto
+  const alternar = (k, porDefecto) => setAbierto(a => ({ ...a, [k]: !(a[k] ?? porDefecto) }))
   const { id } = useParams()
   const navigate = useNavigate()
   const [pedido, setPedido] = useState(null)
@@ -289,6 +293,12 @@ export default function DetallePedidoTransp() {
   // Paso 6: informar descarga
   // Documento vigente del camión (los anulados por una incidencia no cuentan)
   const docVigente = (cvId) => documentos.find(d => d.camion_viaje_id === cvId && !d.anulado)
+  const badgeT = (cv) => cv.estado === 'baja' ? <Badge color="gray">Baja por incidencia</Badge>
+    : cv.fecha_descarga ? <Badge color={cv.con_incidencia ? 'orange' : 'green'}>{cv.con_incidencia ? '⚠️ Cerrado con incidencia' : '✅ Descarga informada'}</Badge>
+    : !docVigente(cv.id) ? <Badge color="orange">Esperando documento</Badge>
+    : cv.fecha_carga ? <Badge color="blue">🚛 Cargado, en viaje</Badge>
+    : etapa === 'en_camino' ? <Badge color="blue">En camino a cargar</Badge>
+    : <Badge color="green">📄 Documento recibido</Badge>
   const docLabel = documentoDe(pedido).label
 
   const resolverAviso = async (incId) => {
@@ -518,23 +528,22 @@ export default function DetallePedidoTransp() {
         {camionesViaje.length > 0 && (
           <Card className="mb-3">
             <div className="text-xs font-semibold text-azul-600 mb-2">Camiones asignados</div>
-            {camionesViaje.map((cv, i) => (
+            {camionesViaje.map((cv, i) => ({ cv, i, fin: cv.estado === 'baja' || !!cv.fecha_descarga }))
+              .sort((a, b) => a.fin - b.fin || a.i - b.i)
+              .map(({ cv, i, fin }) => {
+              const necesita = !fin || misIncidencias.some(x => x.camion_viaje_id === cv.id && !x.resuelta)
+              if (!estaAbierto(cv.id, necesita)) return (
+                <button key={cv.id} onClick={() => alternar(cv.id, necesita)}
+                  className="w-full flex items-center justify-between gap-2 border border-gray-100 rounded-[10px] px-3 py-2 mb-1.5 text-left">
+                  <span className="text-xs text-gray-700 truncate">▸ <b>Camión {i + 1}</b> · {cv.chasis?.dominio}{cv.choferes?.apellido ? ` · ${cv.choferes.apellido}` : ''}</span>
+                  {badgeT(cv)}
+                </button>
+              )
+              return (
               <div key={cv.id} className="border border-gray-100 rounded-[10px] p-3 mb-2">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-semibold text-gray-900">Camión {i + 1}</span>
-                  {cv.estado === 'baja' ? (
-                    <Badge color="gray">Baja por incidencia</Badge>
-                  ) : cv.fecha_descarga ? (
-                    <Badge color={cv.con_incidencia ? 'orange' : 'green'}>{cv.con_incidencia ? '⚠️ Cerrado con incidencia' : '✅ Descarga informada'}</Badge>
-                  ) : !docVigente(cv.id) ? (
-                    <Badge color="orange">Esperando documento</Badge>
-                  ) : cv.fecha_carga ? (
-                    <Badge color="blue">🚛 Cargado, en viaje</Badge>
-                  ) : etapa === 'en_camino' ? (
-                    <Badge color="blue">En camino a cargar</Badge>
-                  ) : (
-                    <Badge color="green">📄 Documento recibido</Badge>
-                  )}
+                <div className="flex items-center justify-between mb-1 cursor-pointer" onClick={() => alternar(cv.id, necesita)}>
+                  <span className="text-xs font-semibold text-gray-900">▾ Camión {i + 1}</span>
+                  {badgeT(cv)}
                 </div>
                 {misIncidencias.filter(inc => inc.camion_viaje_id === cv.id).map(inc => (
                   <IncidenciaCard key={inc.id} inc={inc} cv={cv} rol="transportista"
@@ -594,7 +603,7 @@ export default function DetallePedidoTransp() {
                   <div className="text-xs text-verde-600 mt-1">Descargado: {formatFecha(cv.fecha_descarga)}</div>
                 )}
               </div>
-            ))}
+            )})}
           </Card>
         )}
 

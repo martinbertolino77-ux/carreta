@@ -57,6 +57,10 @@ export default function DetallePedido() {
   const [archivoDoc, setArchivoDoc] = useState(null)
   const [confirmando, setConfirmando] = useState(false)
   const [modalCalif, setModalCalif] = useState(null)
+  // Plegado: lo terminado se repliega solo; lo que pide acción queda abierto. Se puede abrir/cerrar a mano.
+  const [abierto, setAbierto] = useState({})
+  const estaAbierto = (k, porDefecto) => abierto[k] ?? porDefecto
+  const alternar = (k, porDefecto) => setAbierto(a => ({ ...a, [k]: !(a[k] ?? porDefecto) }))
 
   useEffect(() => { cargar() }, [id, cuenta?.id])
 
@@ -304,6 +308,27 @@ export default function DetallePedido() {
 
   const est = ESTADOS_PEDIDO[pedido.estado] || { label: pedido.estado, color: 'gray' }
   const esAgricola = pedido.tipo_actividad === 'agricola'
+  // Estado de un camión para ordenar y plegar (necesita = pide acción del productor)
+  const estadoCamion = (cv, o) => {
+    const doc = documentos.find(d => d.camion_viaje_id === cv.id && !d.anulado)
+    const pendInc = incidencias.some(x => x.camion_viaje_id === cv.id && !x.resuelta)
+    const faltaDoc = cv.estado === 'activo' && !cv.fecha_descarga && !doc && ['datos_enviados', 'en_camino'].includes(o.etapa)
+    const necesita = faltaDoc || pendInc
+    const orden = necesita ? 0 : (cv.estado === 'baja' || cv.fecha_descarga) ? 2 : 1
+    return { necesita, orden }
+  }
+  const badgeCamion = (cv, o, doc) => cv.estado === 'baja'
+    ? <Badge color="gray">Baja por incidencia</Badge>
+    : cv.fecha_descarga
+      ? <Badge color={cv.con_incidencia ? 'orange' : 'green'}>{cv.con_incidencia ? '⚠️ Cerrado con incidencia' : '✅ Descargado'}</Badge>
+      : !doc
+        ? <Badge color="orange">Falta documento</Badge>
+        : cv.fecha_carga
+          ? <Badge color="blue">🚛 Cargado, en viaje</Badge>
+          : o.etapa === 'en_camino'
+            ? <Badge color="blue">En camino a cargar</Badge>
+            : <Badge color="gray">Documento OK</Badge>
+
   const nombreT = (o) => o.transportistas?.usuarios?.razon_social ||
     `${o.transportistas?.usuarios?.nombre || ''} ${o.transportistas?.usuarios?.apellido || ''}`.trim()
   const aceptadas = ofertas.filter(o => o.estado === 'seleccionada')
@@ -455,18 +480,21 @@ export default function DetallePedido() {
           </Card>
         )}
 
-        {/* Ofertas */}
+        {/* Ofertas: con el pedido en marcha se repliegan; las cerradas van aparte */}
+        {(() => { const abiertaOf = estaAbierto('ofertas', pedidoAbierto); return (
         <Card className="mb-3">
-          <div className="text-xs font-semibold text-azul-600 mb-2">
-            Ofertas recibidas ({ofertas.length})
-          </div>
-          {ofertas.length === 0 ? (
+          <button onClick={() => alternar('ofertas', pedidoAbierto)} className="w-full flex items-center justify-between text-left mb-2">
+            <span className="text-xs font-semibold text-azul-600">{abiertaOf ? '▾' : '▸'} Ofertas recibidas ({ofertas.length})</span>
+            {!abiertaOf && ofertas.some(o => o.estado === 'enviada') && <Badge color="orange">{ofertas.filter(o => o.estado === 'enviada').length} pendiente(s)</Badge>}
+          </button>
+          {!abiertaOf ? null : ofertas.length === 0 ? (
             <div className="text-center py-4">
               <div className="text-2xl mb-1 opacity-40">⏳</div>
               <div className="text-xs text-gray-400">Esperando ofertas de transportistas</div>
             </div>
           ) : (
-            ofertas.map(o => {
+            [...ofertas.filter(o => ['enviada','seleccionada'].includes(o.estado)),
+             ...(estaAbierto('ofertas-otras', false) ? ofertas.filter(o => !['enviada','seleccionada'].includes(o.estado)) : [])].map(o => {
               const eo = ESTADOS_OFERTA[o.estado] || { label: o.estado, color: 'gray' }
               const maxAceptable = Math.min(o.camiones_ofrecidos || 1, restante)
               return (
@@ -538,16 +566,24 @@ export default function DetallePedido() {
               )
             })
           )}
+          {abiertaOf && ofertas.some(o => !['enviada','seleccionada'].includes(o.estado)) && (
+            <button onClick={() => alternar('ofertas-otras', false)} className="text-xs text-gray-500 font-semibold">
+              {estaAbierto('ofertas-otras', false) ? '▾ Ocultar' : '▸ Ver'} otras ofertas ({ofertas.filter(o => !['enviada','seleccionada'].includes(o.estado)).length}: en pausa, rechazadas o canceladas)
+            </button>
+          )}
         </Card>
+        ) })()}
 
         {/* Transportistas aceptados: uno por tarjeta, con su etapa y camiones */}
         {aceptadas.map(o => {
           const et = ETAPAS_TRANSPORTISTA[o.etapa] || { label: o.etapa, color: 'gray' }
           const dop = datosOps.find(d => d.transportista_id === o.transportista_id)
           const cvs = dop ? camionesViaje.filter(c => c.datos_operativos_id === dop.id) : []
+          const abiertaT = estaAbierto(`t-${o.id}`, o.etapa !== 'finalizado')
+          const nDesc = cvs.filter(c => c.fecha_descarga).length
           return (
             <Card key={o.id} className="mb-3">
-              <div className="flex items-start justify-between mb-2">
+              <div className="flex items-start justify-between mb-2 cursor-pointer" onClick={() => alternar(`t-${o.id}`, o.etapa !== 'finalizado')}>
                 <div>
                   <div className="text-xs font-semibold text-verde-600">🚛 Transportista</div>
                   <div className="text-sm font-semibold text-gray-900">{nombreT(o)}</div>
@@ -556,8 +592,12 @@ export default function DetallePedido() {
                     {o.equipos?.length > 0 && ` · ${o.equipos.map(e => VEHICULOS[e] || e).join(', ')}`}
                   </div>
                 </div>
-                <Badge color={et.color}>{et.label}</Badge>
+                <div className="flex flex-col items-end gap-1">
+                  <Badge color={et.color}>{et.label}</Badge>
+                  <span className="text-[10px] text-gray-400">{abiertaT ? '▾ ocultar' : `▸ ver${cvs.length ? ` · ${nDesc}/${cvs.length} descargados` : ''}`}</span>
+                </div>
               </div>
+              {abiertaT && (<>
               <Contacto telefono={o.transportistas?.usuarios?.telefono} className="mb-2" />
               <Condiciones oferta={o} />
 
@@ -580,9 +620,19 @@ export default function DetallePedido() {
                 <Condiciones oferta={dop} />
               )}
 
-              {cvs.map((cv, i) => {
+              {cvs.map((cv, i) => ({ cv, i, ...estadoCamion(cv, o) }))
+                .sort((a, b) => a.orden - b.orden || a.i - b.i)
+                .map(({ cv, i, necesita }) => {
                 const doc = documentos.find(d => d.camion_viaje_id === cv.id && !d.anulado)
                 const enCurso = cv.estado === 'activo' && !cv.fecha_descarga
+                const abiertoCv = estaAbierto(cv.id, necesita)
+                if (!abiertoCv) return (
+                  <button key={cv.id} onClick={() => alternar(cv.id, necesita)}
+                    className="w-full flex items-center justify-between gap-2 border border-gray-100 rounded-[10px] px-3 py-2 mb-1.5 text-left">
+                    <span className="text-xs text-gray-700 truncate">▸ <b>Camión {i + 1}</b> · {cv.chasis?.dominio}{cv.choferes?.apellido ? ` · ${cv.choferes.apellido}` : ''}</span>
+                    {badgeCamion(cv, o, doc)}
+                  </button>
+                )
                 return (
                   <div key={cv.id} className="border border-gray-100 rounded-[10px] p-3 mb-2">
                     {incidencias.filter(inc => inc.camion_viaje_id === cv.id).map(inc => (
@@ -590,19 +640,9 @@ export default function DetallePedido() {
                         tieneDocumento={!!doc} docLabel={docLabel}
                         onResolver={['aviso_productor', 'reparacion'].includes(inc.accion) ? resolverAviso : null} />
                     ))}
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-semibold text-gray-900">Camión {i + 1}</span>
-                      {cv.estado === 'baja'
-                        ? <Badge color="gray">Baja por incidencia</Badge>
-                        : cv.fecha_descarga
-                          ? <Badge color={cv.con_incidencia ? 'orange' : 'green'}>{cv.con_incidencia ? '⚠️ Cerrado con incidencia' : '✅ Descargado'}</Badge>
-                          : !doc
-                            ? <Badge color="orange">Falta documento</Badge>
-                            : cv.fecha_carga
-                              ? <Badge color="blue">🚛 Cargado, en viaje</Badge>
-                              : o.etapa === 'en_camino'
-                                ? <Badge color="blue">En camino a cargar</Badge>
-                                : <Badge color="gray">Documento OK</Badge>}
+                    <div className="flex items-center justify-between mb-1 cursor-pointer" onClick={() => alternar(cv.id, necesita)}>
+                      <span className="text-xs font-semibold text-gray-900">▾ Camión {i + 1}</span>
+                      {badgeCamion(cv, o, doc)}
                     </div>
                     <div className="text-xs text-gray-600">
                       🚛 {cv.chasis?.dominio} <span className="text-gray-400">({TIPOS_CHASIS[cv.chasis?.tipo] || 'Chasis'}{cv.chasis?.tara_kg ? ` · tara ${formatNum(cv.chasis.tara_kg)} kg` : ''})</span>
@@ -675,6 +715,7 @@ export default function DetallePedido() {
               {o.etapa === 'finalizado' && o.calif_prod && (
                 <div className="text-[11px] text-verde-600 font-medium">✔ {nombreT(o)} calificado</div>
               )}
+              </>)}
             </Card>
           )
         })}

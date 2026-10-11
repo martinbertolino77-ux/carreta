@@ -52,6 +52,7 @@ export default function Equipo() {
   const [invPermiso, setInvPermiso]   = useState('operador')
   const [linkInv, setLinkInv]         = useState(null)
   const [copiado, setCopiado]         = useState(false)
+  const [mail, setMail]               = useState(null)   // estado del mail de la invitación: enviando / ok / error
   const [aviso, setAviso]             = useState(null)   // { permiso, quien, accion, seguir }
 
   // Antes de dar master u operador: mostrar qué va a poder hacer
@@ -127,9 +128,9 @@ export default function Equipo() {
   const linkDe = (token) => `${window.location.origin}/registro?inv=${token}`
 
   const invitar = () => {
-    setError(''); setLinkInv(null); setCopiado(false)
+    setError(''); setLinkInv(null); setCopiado(false); setMail(null)
     if (!/\S+@\S+\.\S+/.test(invEmail)) { setError('Ingresá un email válido'); return }
-    confirmarPermiso(invPermiso, invEmail.trim().toLowerCase(), 'Generar link', generarInvitacion)
+    confirmarPermiso(invPermiso, invEmail.trim().toLowerCase(), 'Invitar', generarInvitacion)
   }
 
   const generarInvitacion = async () => {
@@ -139,16 +140,24 @@ export default function Equipo() {
     })
     setOcupado(null)
     if (error) { setError(error.message); return }
-    setLinkInv({ email: invEmail.trim().toLowerCase(), url: linkDe(data) })
+    setLinkInv({ email: invEmail.trim().toLowerCase(), url: linkDe(data), token: data })
     setInvEmail('')
     cargar()
+    mandarMail(data)
+  }
+
+  // El mail sale desde soporte@ (puede tardar unos segundos)
+  async function mandarMail(token) {
+    setMail('enviando')
+    const { data, error } = await supabase.functions.invoke('enviar-invitacion', { body: { token } })
+    setMail(error || data?.error ? 'error' : 'ok')
   }
 
   const copiar = async (url) => {
     try { await navigator.clipboard.writeText(url); setCopiado(true) } catch { /* sin portapapeles */ }
   }
   const textoWA = (url) => encodeURIComponent(
-    `Te invito a sumarte a ${cuenta.razon_social} en Carreta. Creá tu usuario con este link: ${url}`)
+    `Te invito a sumarte a ${cuenta.razon_social} en Carreta. Sumate con este link: ${url}`)
 
   const borrarInv = (i) => ejecutar(`inv-${i.id}`, () => supabase.from('invitaciones').delete().eq('id', i.id))
 
@@ -235,7 +244,7 @@ export default function Equipo() {
             <div className="text-[11px] font-semibold text-gray-400 tracking-wide mb-1.5 mt-3">INVITAR A ALGUIEN</div>
             <Card>
               <p className="text-xs text-gray-500 mb-2">
-                Generá un link y mandáselo. Con ese link crea su usuario y entra directo a tu cuenta.
+                Le mandamos un mail con el link para sumarse. También podés mandárselo por WhatsApp. Si ya usa Carreta, se suma sin dejar su empresa.
               </p>
               <input type="email" placeholder="Email de la persona" value={invEmail}
                 onChange={e => setInvEmail(e.target.value)}
@@ -248,15 +257,23 @@ export default function Equipo() {
                 </select>
               </div>
               <Button disabled={ocupado === 'invitar'} onClick={invitar}>
-                {ocupado === 'invitar' ? 'Generando…' : 'Generar link de invitación'}
+                {ocupado === 'invitar' ? 'Generando…' : 'Invitar'}
               </Button>
 
               {linkInv && (
                 <div className="mt-3 bg-verde-50 border border-verde-100 rounded-[10px] p-2.5">
+                  <div className="text-xs mb-1.5">
+                    {mail === 'enviando' && <span className="text-gray-500">📧 Mandando el mail a {linkInv.email}…</span>}
+                    {mail === 'ok' && <span className="text-verde-700 font-semibold">✓ Le mandamos el mail a {linkInv.email}</span>}
+                    {mail === 'error' && <span className="text-red-600">No se pudo mandar el mail. Mandale el link por WhatsApp o copialo.</span>}
+                  </div>
                   <div className="text-xs text-gray-600 mb-1">Link para <strong>{linkInv.email}</strong> (vence en 7 días):</div>
                   <div className="text-[10px] text-gray-500 break-all mb-2">{linkInv.url}</div>
                   <div className="flex gap-2">
                     <Button size="sm" variant="secondary" onClick={() => copiar(linkInv.url)}>{copiado ? '✓ Copiado' : 'Copiar'}</Button>
+                    <Button size="sm" variant="secondary" disabled={mail === 'enviando'} onClick={() => mandarMail(linkInv.token)}>
+                      {mail === 'ok' || mail === 'error' ? 'Reenviar mail' : 'Mail'}
+                    </Button>
                     <a href={`https://wa.me/?text=${textoWA(linkInv.url)}`} target="_blank" rel="noreferrer" className="w-full">
                       <Button size="sm" variant="whatsapp">WhatsApp</Button>
                     </a>
@@ -281,7 +298,7 @@ export default function Equipo() {
                         </div>
                         <div className="flex gap-3 flex-shrink-0">
                           {!vencida && (
-                            <button onClick={() => { setLinkInv({ email: i.email, url: linkDe(i.token) }); setCopiado(false) }}
+                            <button onClick={() => { setLinkInv({ email: i.email, url: linkDe(i.token), token: i.token }); setCopiado(false); setMail(null) }}
                               className="text-xs text-verde-700 font-semibold">Ver link</button>
                           )}
                           <button onClick={() => borrarInv(i)} disabled={!!ocupado}

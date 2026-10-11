@@ -21,18 +21,18 @@ export default function BottomTabs({ rol }) {
   const activeColor = rol === 'transportista' ? 'border-azul-500 text-azul-600' : 'border-verde-600 text-verde-700'
 
   return (
-    <div className="bg-white border-t border-gray-200 flex flex-shrink-0" style={{ paddingBottom:'env(safe-area-inset-bottom,0px)' }}>
+    <div className="nav-tabs bg-white border-t border-gray-200 flex flex-shrink-0" style={{ paddingBottom:'env(safe-area-inset-bottom,0px)' }}>
       {tabs.map(tab => {
         const act = pathname.startsWith(tab.path)
         return (
           <button
             key={tab.path}
             onClick={() => navigate(tab.path)}
-            className={`flex-1 flex flex-col items-center py-2 gap-0.5 border-t-2 transition-all
-              ${act ? activeColor : 'border-transparent text-gray-400'}`}
+            className={`nav-tab flex-1 flex flex-col items-center py-2 gap-0.5 border-t-2 transition-all
+              ${act ? `${activeColor} activo` : 'border-transparent text-gray-400'}`}
           >
             <span className="text-[19px]">{tab.icon}</span>
-            <span className="text-[10px] font-medium">{tab.label}</span>
+            <span className="nav-label text-[10px] font-medium">{tab.label}</span>
           </button>
         )
       })}

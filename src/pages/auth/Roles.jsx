@@ -35,7 +35,7 @@ export default function Roles() {
   const nombre = usuario?.nombre || ''
 
   return (
-    <div className="min-h-screen bg-[#F4F6F4] flex flex-col px-5 py-10">
+    <div className="min-h-screen bg-[#F4F6F4] flex flex-col px-5 py-10 lg:max-w-xl lg:mx-auto lg:w-full">
       <div className="mb-7">
         <h1 className="text-2xl font-bold text-gray-900">Hola, {nombre}</h1>
         {cuenta?.razon_social && cuentas.length < 2 && <p className="text-xs text-gray-400 mt-0.5">{cuenta.razon_social}</p>}

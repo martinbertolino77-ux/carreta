@@ -58,7 +58,7 @@ export default function Topbar({ title, showBack, backTo, accent = 'verde' }) {
   }
 
   return (
-    <div className={`${bg} px-4 py-3 flex items-center justify-between flex-shrink-0 relative`}>
+    <div className={`topbar ${bg} px-4 lg:px-6 py-3 flex items-center justify-between flex-shrink-0 relative`}>
       <div className="flex items-center gap-2.5">
         {showBack ? (
           <button

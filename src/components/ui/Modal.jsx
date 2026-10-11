@@ -11,11 +11,11 @@ export default function Modal({ open, onClose, title, children }) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/45 flex items-end justify-center z-50"
+      className="fixed inset-0 bg-black/45 flex items-end lg:items-center justify-center z-50"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-t-2xl p-5 w-full max-w-[420px] max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-t-2xl lg:rounded-2xl p-5 w-full max-w-[420px] lg:max-w-[520px] max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
         {title && <h2 className="text-base font-bold text-gray-900 mb-1.5">{title}</h2>}
